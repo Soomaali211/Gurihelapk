@@ -1,0 +1,6 @@
+{
+  "name": "GuriHel - Hantida Ma-Guurtada & Admin Platform",
+  "description": "App-ka hantida ma-guurtada ah ee Somaliland (Hargeysa) oo isku xira khariidadda, liisaska, mashaariicda dhismaha, ballamaha, wada-hadalka tooska ah, AI Search, iyo xarunta maamulka (Admin Dashboard).",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
