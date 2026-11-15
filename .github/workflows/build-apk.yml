@@ -30,6 +30,36 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
+      - name: Compute App Version & Signing Config
+        id: ver
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          SECRET_STORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          SECRET_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          SECRET_KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          BUILD_NUM=$((400 + GITHUB_RUN_NUMBER))
+          PATCH_NUM=$((3 + GITHUB_RUN_NUMBER))
+          VERSION_NAME="4.0.${PATCH_NUM}"
+          echo "version_code=${BUILD_NUM}" >> "$GITHUB_OUTPUT"
+          echo "version_name=${VERSION_NAME}" >> "$GITHUB_OUTPUT"
+          echo "ANDROID_VERSION_CODE=${BUILD_NUM}" >> "$GITHUB_ENV"
+          echo "ANDROID_VERSION_NAME=${VERSION_NAME}" >> "$GITHUB_ENV"
+
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 --decode > android/app/custom-release.keystore
+            echo "ANDROID_KEYSTORE_PATH=custom-release.keystore" >> "$GITHUB_ENV"
+          elif [ -f "android/app/gurihel-signing.p12" ]; then
+            echo "ANDROID_KEYSTORE_PATH=gurihel-signing.p12" >> "$GITHUB_ENV"
+          else
+            keytool -genkeypair -v -storetype PKCS12 -keystore android/app/gurihel-signing.p12 -alias gurihel -keyalg RSA -keysize 2048 -validity 10000 -storepass gurihel2026 -keypass gurihel2026 -dname "CN=GuriHel,O=GuriHel Somaliland,L=Hargeisa,C=SO"
+            echo "ANDROID_KEYSTORE_PATH=gurihel-signing.p12" >> "$GITHUB_ENV"
+          fi
+
+          echo "ANDROID_KEYSTORE_PASSWORD=${SECRET_STORE_PASS:-gurihel2026}" >> "$GITHUB_ENV"
+          echo "ANDROID_KEY_ALIAS=${SECRET_ALIAS:-gurihel}" >> "$GITHUB_ENV"
+          echo "ANDROID_KEY_PASSWORD=${SECRET_KEY_PASS:-gurihel2026}" >> "$GITHUB_ENV"
+
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
@@ -39,8 +69,6 @@ jobs:
       - name: Build web bundle (Vite)
         env:
           VITE_API_BASE_URL: https://ais-pre-fkdyozsv76cejphilj3vft-357698603471.europe-west2.run.app
-          ANDROID_VERSION_CODE: ${{ 400 + github.run_number }}
-          ANDROID_VERSION_NAME: 4.0.${{ 3 + github.run_number }}
         run: npm run build
 
       - name: Sync Capacitor Android assets
@@ -50,20 +78,8 @@ jobs:
           fi
           npx cap sync android
 
-      - name: Configure Optional Custom Release Keystore Secret
-        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
-        run: |
-          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > android/app/custom-release.keystore
-
       - name: Build Signed Release APK
         working-directory: android
-        env:
-          ANDROID_VERSION_CODE: ${{ 400 + github.run_number }}
-          ANDROID_VERSION_NAME: 4.0.${{ 3 + github.run_number }}
-          ANDROID_KEYSTORE_PATH: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' && 'custom-release.keystore' || 'gurihel-signing.p12' }}
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD || 'gurihel2026' }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS || 'gurihel' }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD || 'gurihel2026' }}
         run: |
           chmod +x ./gradlew
           ./gradlew assembleRelease
@@ -89,10 +105,10 @@ jobs:
       - name: Publish APK to GitHub Releases
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v4.0.${{ 3 + github.run_number }}
-          name: GuriHel Android APK (v4.0.${{ 3 + github.run_number }})
+          tag_name: v${{ steps.ver.outputs.version_name }}
+          name: GuriHel Android APK (v${{ steps.ver.outputs.version_name }})
           body: |
-            GuriHel Android APK (v4.0.${{ 3 + github.run_number }} / Build ${{ 400 + github.run_number }}) oo diyaar u ah in si toos ah loo install-gareeyo ama loogu update-gareeyo kii hore.
+            GuriHel Android APK (v${{ steps.ver.outputs.version_name }} / Build ${{ steps.ver.outputs.version_code }}) oo diyaar u ah in si toos ah loo install-gareeyo ama loogu update-gareeyo kii hore.
             - **In-Place Update Safe:** Wuxuu leeyahay saxiix (keystore) joogto ah iyo versionCode kordhaya si xogtii hore aanay u lumin.
             - Soo dejiso **`GuriHel-android.apk`** kadibna ku dhufo **Install / Update**.
           files: release-apk/GuriHel-android.apk
