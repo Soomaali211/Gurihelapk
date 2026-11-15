@@ -106,7 +106,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   // Screenshot 5: Dedicated Clean White Phone Login Screen
   if (!isAuthenticated && authStep === 'login') {
     return (
-      <div className="bg-white min-h-[610px] flex flex-col px-5 pt-3 pb-8 font-sans select-none">
+      <div className="bg-white min-h-full w-full max-w-full flex flex-col px-4 sm:px-5 pt-3 pb-8 font-sans select-none overflow-x-hidden">
         {/* Top Green Back Arrow */}
         <div>
           <button
@@ -151,7 +151,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
               value={phoneInput}
               onChange={(e) => setPhoneInput(e.target.value)}
               placeholder="63 xxx xxxx"
-              className="flex-1 pl-3 bg-transparent text-sm font-semibold text-slate-900 placeholder:text-slate-400 outline-none tabular-nums"
+              className="flex-1 min-w-0 pl-3 bg-transparent text-sm font-semibold text-slate-900 placeholder:text-slate-400 outline-none tabular-nums"
             />
           </div>
 
@@ -230,7 +230,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   // Step 2: OTP Verification (Preview / SMS Console note)
   if (!firebaseUser && authStep === 'otp') {
     return (
-      <div className="bg-white min-h-[610px] flex flex-col px-5 pt-3 pb-8 font-sans select-none">
+      <div className="bg-white min-h-full w-full max-w-full flex flex-col px-4 sm:px-5 pt-3 pb-8 font-sans select-none overflow-x-hidden">
         <div>
           <button
             onClick={() => setAuthStep('login')}
@@ -291,7 +291,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
     .toUpperCase();
 
   return (
-    <div className="p-4 space-y-5 bg-[#F6F8F9] min-h-[610px] pb-16">
+    <div className="p-3.5 sm:p-4 space-y-5 bg-[#F6F8F9] min-h-full w-full max-w-full overflow-x-hidden pb-10">
       {/* Profile Header */}
       <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs flex items-center justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
@@ -388,7 +388,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
         <div className="space-y-4">
           <div className="bg-white rounded-2xl border border-slate-200/80 p-4 space-y-3 shadow-2xs">
             <h4 className="text-xs font-bold text-slate-900">Doorkaaga Nidaamka (Preview Role)</h4>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
               {[
                 { id: 'seeker', label: 'Macaamiil', desc: 'Raadi & kaydi' },
                 { id: 'broker', label: 'Dilaal', desc: 'Soo geli hanti' },
@@ -397,14 +397,14 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                 <div
                   key={r.id}
                   onClick={() => onRoleChange(r.id as UserRole)}
-                  className={`p-2.5 rounded-xl border cursor-pointer transition-all ${
+                  className={`min-w-0 p-2 sm:p-2.5 rounded-xl border cursor-pointer transition-all ${
                     userRole === r.id
                       ? 'bg-emerald-50 border-[#0B7A3E]'
                       : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
                   }`}
                 >
-                  <div className="text-xs font-bold text-slate-900">{r.label}</div>
-                  <div className="text-[10px] text-slate-500 mt-0.5">{r.desc}</div>
+                  <div className="text-xs font-bold text-slate-900 truncate">{r.label}</div>
+                  <div className="text-[10px] text-slate-500 mt-0.5 leading-tight">{r.desc}</div>
                 </div>
               ))}
             </div>
@@ -412,7 +412,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
 
           <div className="bg-white rounded-2xl border border-slate-200/80 p-4 space-y-3 shadow-2xs">
             <h4 className="text-xs font-bold text-slate-900">Luqadda App-ka</h4>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               {[
                 { code: 'SO', name: 'Af-Soomaali' },
                 { code: 'EN', name: 'English' },

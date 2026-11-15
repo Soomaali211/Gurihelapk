@@ -88,27 +88,27 @@ export const ListingCard: React.FC<ListingCardProps> = ({
         </div>
 
         {/* Specs footer */}
-        <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs text-slate-600">
-          <div className="flex items-center gap-3">
+        <div className="mt-3 pt-2.5 border-t border-slate-100 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-xs text-slate-600">
+          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 min-w-0">
             {listing.bedrooms > 0 && (
-              <span className="flex items-center gap-1">
-                <Bed className="w-3.5 h-3.5 text-slate-400" />
+              <span className="flex items-center gap-1 whitespace-nowrap">
+                <Bed className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                 <span>{listing.bedrooms} qol</span>
               </span>
             )}
             {listing.bathrooms > 0 && (
-              <span className="flex items-center gap-1">
-                <Bath className="w-3.5 h-3.5 text-slate-400" />
+              <span className="flex items-center gap-1 whitespace-nowrap">
+                <Bath className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                 <span>{listing.bathrooms} musqul</span>
               </span>
             )}
-            <span className="flex items-center gap-1">
-              <Maximize2 className="w-3.5 h-3.5 text-slate-400" />
+            <span className="flex items-center gap-1 whitespace-nowrap">
+              <Maximize2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
               <span>{listing.area_m2} m²</span>
             </span>
           </div>
 
-          <span className="text-[11px] font-semibold capitalize text-slate-400">
+          <span className="text-[11px] font-semibold capitalize text-slate-400 shrink-0">
             {listing.property_type}
           </span>
         </div>

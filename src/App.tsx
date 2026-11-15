@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
+import { Capacitor } from '@capacitor/core';
 import {
   Listing,
   Project,
@@ -57,6 +58,7 @@ function mergeListingsUnique(primary: Listing[], secondary: Listing[]): Listing[
 }
 
 export default function App() {
+  const isNativeApk = Capacitor.isNativePlatform();
   const bootRef = useRef(loadPersistedState());
   const initialPersisted = bootRef.current.state;
 
@@ -406,44 +408,57 @@ export default function App() {
     return true;
   });
 
+  // In native Android APK, always render strict Mobile Layout (never Desktop Mode)
+  const effectiveView = isNativeApk ? 'mobile' : currentView;
+
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-[#18211C] flex flex-col font-sans">
-      <TopBar
-        currentView={currentView}
-        onViewChange={(view) => setCurrentView(view)}
-        userRole={userRole}
-        onRoleChange={(role) => setUserRole(role)}
-        onAiSearch={handleAiSearch}
-        aiFilterActive={aiFilterActive}
-        aiExplanation={aiExplanation}
-        onClearAiFilter={handleClearAiFilter}
-        isSearchingAi={isSearchingAi}
-        onOpenTechStack={() => setShowTechStack(true)}
-      />
+    <div
+      className={`${
+        isNativeApk ? 'h-[100dvh] overflow-hidden bg-white' : 'min-h-screen bg-[#F8FAFC]'
+      } text-[#18211C] flex flex-col font-sans w-full max-w-full overflow-x-hidden`}
+    >
+      {!isNativeApk && (
+        <TopBar
+          currentView={currentView}
+          onViewChange={(view) => setCurrentView(view)}
+          userRole={userRole}
+          onRoleChange={(role) => setUserRole(role)}
+          onAiSearch={handleAiSearch}
+          aiFilterActive={aiFilterActive}
+          aiExplanation={aiExplanation}
+          onClearAiFilter={handleClearAiFilter}
+          isSearchingAi={isSearchingAi}
+          onOpenTechStack={() => setShowTechStack(true)}
+        />
+      )}
 
       {upgradeBanner && (
-        <div className="bg-emerald-50 border-b border-emerald-200 px-4 py-2 text-[11px] font-bold text-[#0B7A3E] flex items-center justify-between">
-          <span>✓ {upgradeBanner}</span>
-          <button onClick={() => setUpgradeBanner(null)} className="ml-3 shrink-0">
+        <div
+          className={`bg-emerald-50 border-b border-emerald-200 px-3 sm:px-4 py-2 text-[11px] font-bold text-[#0B7A3E] flex items-center justify-between gap-2 shrink-0 ${
+            isNativeApk ? 'safe-top' : ''
+          }`}
+        >
+          <span className="min-w-0 break-words">✓ {upgradeBanner}</span>
+          <button onClick={() => setUpgradeBanner(null)} className="shrink-0 p-1">
             ✕
           </button>
         </div>
       )}
 
       {firestoreError && (
-        <div className="bg-amber-50 border-b border-amber-200 px-4 py-1.5 text-[11px] text-amber-900 flex items-center justify-between">
-          <span className="truncate">Firebase Notice: {firestoreError}</span>
+        <div className="bg-amber-50 border-b border-amber-200 px-3 sm:px-4 py-1.5 text-[11px] text-amber-900 flex items-center justify-between gap-2 shrink-0">
+          <span className="truncate min-w-0">Firebase Notice: {firestoreError}</span>
           <button
             onClick={() => setFirestoreError(null)}
-            className="font-bold text-amber-700 ml-3 shrink-0"
+            className="font-bold text-amber-700 shrink-0 p-1"
           >
             ✕
           </button>
         </div>
       )}
 
-      <div className="flex-1">
-        {currentView === 'mobile' ? (
+      <div className="flex-1 min-h-0 flex flex-col">
+        {effectiveView === 'mobile' ? (
           <MobileAppShell
             listings={listings}
             projects={projects}
@@ -478,6 +493,11 @@ export default function App() {
             firebaseUser={firebaseUser}
             favorites={favorites}
             onToggleFavorite={handleToggleFavorite}
+            onAiSearch={handleAiSearch}
+            aiFilterActive={aiFilterActive}
+            aiExplanation={aiExplanation}
+            onClearAiFilter={handleClearAiFilter}
+            isSearchingAi={isSearchingAi}
           />
         ) : (
           <AdminDashboard

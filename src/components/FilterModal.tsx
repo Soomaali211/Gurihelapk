@@ -34,7 +34,7 @@ export const FilterModal: React.FC<FilterModalProps> = ({
   ];
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+    <div className="fixed inset-0 z-[500] bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
       <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden border border-[#C9D2CD] my-auto animate-in zoom-in-95 duration-150">
         <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50">
           <div className="flex items-center gap-2">
@@ -97,13 +97,13 @@ export const FilterModal: React.FC<FilterModalProps> = ({
             <label className="text-xs font-bold text-slate-700 block mb-1.5">
               Qolalka Jiifka (Bedrooms):
             </label>
-            <div className="flex gap-2">
+            <div className="grid grid-cols-6 gap-1.5 sm:gap-2">
               {[0, 1, 2, 3, 4, 5].map((num) => (
                 <button
                   key={num}
                   type="button"
                   onClick={() => onUpdateFilters({ ...filters, minBedrooms: num })}
-                  className={`flex-1 py-2 text-xs font-bold rounded-xl border transition-all ${
+                  className={`min-w-0 py-2 text-xs font-bold rounded-xl border transition-all ${
                     filters.minBedrooms === num
                       ? 'bg-[#0B7A3E] text-white border-[#0B7A3E]'
                       : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'

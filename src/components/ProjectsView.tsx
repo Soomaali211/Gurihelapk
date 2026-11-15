@@ -70,7 +70,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
   };
 
   return (
-    <div className="flex flex-col bg-[#F6F8F9] min-h-[610px] font-sans pb-6 select-none">
+    <div className="flex flex-col bg-[#F6F8F9] flex-1 min-h-full w-full max-w-full overflow-x-hidden font-sans pb-6 select-none">
       {/* Clean White Header: Green Back Arrow + Real estate Projects */}
       <div className="bg-white px-4 py-3 border-b border-slate-100 flex items-center gap-3 sticky top-0 z-20">
         <button
@@ -230,9 +230,9 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
                   </div>
                 </div>
 
-                <div className="pt-2 flex items-center justify-between">
-                  <div className="text-xs font-extrabold text-slate-900 truncate">{v.title}</div>
-                  <div className="text-xs font-extrabold text-[#0B7A3E] tabular-nums">{v.price}</div>
+                <div className="pt-2 flex items-center justify-between gap-2 min-w-0">
+                  <div className="text-xs font-extrabold text-slate-900 truncate min-w-0">{v.title}</div>
+                  <div className="text-xs font-extrabold text-[#0B7A3E] tabular-nums shrink-0">{v.price}</div>
                 </div>
               </div>
             ))}
@@ -242,7 +242,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({
 
       {/* Project Detail & Register Interest Modal */}
       {activeProject && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+        <div className="fixed inset-0 z-[500] bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
           <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-200 my-auto animate-in zoom-in-95 duration-150">
             <div className="relative aspect-16/9 w-full bg-slate-900">
               <img

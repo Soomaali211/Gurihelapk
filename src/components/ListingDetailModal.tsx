@@ -1,15 +1,13 @@
-import React, { useState } from 'react';
-import { 
-  ArrowLeft, 
-  Heart, 
-  Share2, 
-  Check, 
-  MapPin, 
-  MessageSquare, 
-  Phone, 
+import React, { useEffect, useRef, useState } from 'react';
+import L from 'leaflet';
+import {
+  ArrowLeft,
+  Heart,
+  Share2,
+  Check,
+  MessageSquare,
+  Phone,
   ShieldCheck,
-  School,
-  Building
 } from 'lucide-react';
 import { Listing } from '../types';
 
@@ -26,22 +24,67 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
   listing,
   onClose,
   onOpenChat,
-  onBookNow,
   isFavorite,
   onToggleFavorite,
 }) => {
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [copiedLink, setCopiedLink] = useState(false);
+  const miniMapRef = useRef<HTMLDivElement | null>(null);
+  const miniMapInstanceRef = useRef<L.Map | null>(null);
+
+  useEffect(() => {
+    setActiveImageIndex(0);
+  }, [listing?.id]);
+
+  useEffect(() => {
+    if (!listing || !miniMapRef.current) return;
+
+    const lat = typeof listing.lat === 'number' && !Number.isNaN(listing.lat) ? listing.lat : 9.558;
+    const lng = typeof listing.lng === 'number' && !Number.isNaN(listing.lng) ? listing.lng : 44.068;
+
+    if (miniMapInstanceRef.current) {
+      miniMapInstanceRef.current.remove();
+      miniMapInstanceRef.current = null;
+    }
+
+    const map = L.map(miniMapRef.current, {
+      center: [lat, lng],
+      zoom: 15,
+      zoomControl: false,
+      attributionControl: true,
+      dragging: false,
+      scrollWheelZoom: false,
+      doubleClickZoom: false,
+      boxZoom: false,
+      keyboard: false,
+    });
+    map.attributionControl.setPrefix(false);
+
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors',
+      maxZoom: 19,
+    }).addTo(map);
+
+    L.marker([lat, lng], {
+      icon: L.divIcon({
+        className: 'gurihel-leaflet-pin',
+        html: '<div style="width:18px;height:18px;border-radius:9999px;background:#0B7A3E;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.4);transform:translate(-50%,-50%);"></div>',
+        iconSize: [0, 0],
+        iconAnchor: [0, 0],
+      }),
+    }).addTo(map);
+
+    miniMapInstanceRef.current = map;
+    const timer = window.setTimeout(() => map.invalidateSize({ animate: false }), 150);
+
+    return () => {
+      window.clearTimeout(timer);
+      map.remove();
+      miniMapInstanceRef.current = null;
+    };
+  }, [listing]);
 
   if (!listing) return null;
-
-  // Use values matching Wireframe 7.5:
-  // "250,000 USD ✔ Verified"
-  // "Villa for sale · District, City"
-  // Chips: "300 m²", "4 bed", "3 bath", "2 floors"
-  // "Mini map + nearby (school, mosque, market)"
-  // "Broker / Owner name · License no. · 24 listings"
-  // Bottom: [ Chat ] and [ Call / WhatsApp ]
 
   const handleShare = () => {
     if (navigator.share) {
@@ -65,10 +108,10 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-y-auto font-sans select-none">
-      <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden border border-[#C9D2CD] my-auto animate-in zoom-in-95 duration-200 flex flex-col max-h-[92vh]">
-        {/* Item 1: Top Bar: [ ← ] (Back) on left, [ ♡ ] and [ ➦ ] (Share) on right */}
-        <div className="px-4 py-3 bg-white border-b border-slate-100 flex items-center justify-between sticky top-0 z-10">
+    <div className="fixed inset-0 z-[500] bg-black/70 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-y-auto font-sans select-none">
+      <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden border border-[#C9D2CD] my-auto animate-in zoom-in-95 duration-200 flex flex-col max-h-[92dvh]">
+        {/* Top Bar */}
+        <div className="px-3.5 sm:px-4 py-2.5 sm:py-3 bg-white border-b border-slate-100 flex items-center justify-between sticky top-0 z-10">
           <button
             onClick={onClose}
             className="p-1.5 hover:bg-slate-100 rounded-full text-slate-700 transition-colors"
@@ -104,7 +147,7 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
 
         {/* Scrollable Body */}
         <div className="overflow-y-auto flex-1">
-          {/* Gallery Slider with pagination dots */}
+          {/* Gallery Slider */}
           <div className="relative aspect-16/10 w-full bg-slate-900 overflow-hidden">
             <img
               src={listing.images[activeImageIndex] || listing.images[0]}
@@ -126,38 +169,37 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
             )}
           </div>
 
-          <div className="p-4 space-y-4">
-            {/* Price & Verified Badge: "250,000 USD ✔ Verified" */}
+          <div className="p-3.5 sm:p-4 space-y-4">
+            {/* Price & Verified Badge */}
             <div>
-              <div className="flex items-center justify-between">
-                <div className="text-xl sm:text-2xl font-black text-[#0B7A3E] tabular-nums">
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-lg sm:text-2xl font-black text-[#0B7A3E] tabular-nums truncate">
                   ${listing.price.toLocaleString()} USD
                 </div>
-                <div className="bg-[#0B7A3E] text-white text-[11px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1">
+                <div className="bg-[#0B7A3E] text-white text-[11px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 shrink-0">
                   <Check className="w-3 h-3 stroke-3" />
                   <span>Verified</span>
                 </div>
               </div>
 
-              {/* Title & Location: "Villa for sale · District, City" */}
               <div className="text-xs font-bold text-slate-500 mt-1">
-                Villa for sale · {listing.district}, {listing.city}
+                {listing.title} · {listing.district}, {listing.city}
               </div>
             </div>
 
-            {/* Chips: 300 m² | 4 bed | 3 bath | 2 floors */}
-            <div className="grid grid-cols-4 gap-2 text-center">
-              <div className="bg-[#EEF2F0] p-2 rounded-xl">
-                <div className="text-xs font-bold text-[#0F3D2A]">{listing.area_m2} m²</div>
+            {/* Specs Grid (Responsive on 360px) */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+              <div className="bg-[#EEF2F0] p-2 rounded-xl min-w-0">
+                <div className="text-xs font-bold text-[#0F3D2A] truncate">{listing.area_m2} m²</div>
               </div>
-              <div className="bg-[#EEF2F0] p-2 rounded-xl">
-                <div className="text-xs font-bold text-[#0F3D2A]">{listing.bedrooms || 4} bed</div>
+              <div className="bg-[#EEF2F0] p-2 rounded-xl min-w-0">
+                <div className="text-xs font-bold text-[#0F3D2A] truncate">{listing.bedrooms || 4} bed</div>
               </div>
-              <div className="bg-[#EEF2F0] p-2 rounded-xl">
-                <div className="text-xs font-bold text-[#0F3D2A]">{listing.bathrooms || 3} bath</div>
+              <div className="bg-[#EEF2F0] p-2 rounded-xl min-w-0">
+                <div className="text-xs font-bold text-[#0F3D2A] truncate">{listing.bathrooms || 3} bath</div>
               </div>
-              <div className="bg-[#EEF2F0] p-2 rounded-xl">
-                <div className="text-xs font-bold text-[#0F3D2A]">2 floors</div>
+              <div className="bg-[#EEF2F0] p-2 rounded-xl min-w-0">
+                <div className="text-xs font-bold text-[#0F3D2A] truncate">2 floors</div>
               </div>
             </div>
 
@@ -171,64 +213,57 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
               </p>
             </div>
 
-            {/* Mini Map + Nearby (school, mosque, market) */}
+            {/* Real OpenStreetMap Mini Map + Nearby */}
             <div>
-              <div className="relative h-28 w-full bg-slate-100 rounded-2xl overflow-hidden border border-[#C9D2CD]">
-                <div className="absolute inset-0 bg-[#e2e8f0] flex items-center justify-center">
-                  <div className="text-center">
-                    <MapPin className="w-6 h-6 text-[#0B7A3E] mx-auto animate-bounce" />
-                    <span className="text-[10px] font-bold text-slate-600">
-                      Mini map + nearby (school, mosque, market)
-                    </span>
-                  </div>
-                </div>
+              <div className="relative h-32 w-full bg-slate-100 rounded-2xl overflow-hidden border border-[#C9D2CD]">
+                <div ref={miniMapRef} className="w-full h-full" />
               </div>
-              <div className="flex items-center justify-around text-[10px] text-slate-500 font-semibold mt-1.5 px-2">
+              <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-slate-500 font-semibold mt-1.5 px-1">
                 <span className="flex items-center gap-1">🏫 Dugsi: 350m</span>
                 <span className="flex items-center gap-1">🕌 Masaajid: 150m</span>
                 <span className="flex items-center gap-1">🛒 Suuqa: 500m</span>
               </div>
             </div>
 
-            {/* Broker / Owner Card: "Broker / Owner name · License no. · 24 listings" */}
-            <div className="bg-slate-50 p-3 rounded-2xl border border-[#C9D2CD] flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2.5">
+            {/* Broker Card */}
+            <div className="bg-slate-50 p-3 rounded-2xl border border-[#C9D2CD] flex items-center justify-between gap-2.5">
+              <div className="flex items-center gap-2.5 min-w-0">
                 <img
                   src={listing.broker.avatar}
                   alt={listing.broker.name}
-                  className="w-10 h-10 rounded-full object-cover border border-[#0B7A3E]"
+                  className="w-10 h-10 rounded-full object-cover border border-[#0B7A3E] shrink-0"
                 />
-                <div>
+                <div className="min-w-0">
                   <div className="flex items-center gap-1">
-                    <h5 className="text-xs font-bold text-slate-900">{listing.broker.name}</h5>
-                    <ShieldCheck className="w-3.5 h-3.5 text-[#0B7A3E]" />
+                    <h5 className="text-xs font-bold text-slate-900 truncate">{listing.broker.name}</h5>
+                    <ShieldCheck className="w-3.5 h-3.5 text-[#0B7A3E] shrink-0" />
                   </div>
-                  <div className="text-[10px] text-slate-500">
+                  <div className="text-[10px] text-slate-500 truncate">
                     Shati: {listing.broker.license} · <span className="font-bold text-[#0B7A3E]">24 listings</span>
                   </div>
                 </div>
               </div>
 
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-emerald-200" title="Online"></span>
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-emerald-200 shrink-0" title="Online"></span>
             </div>
           </div>
         </div>
 
-        {/* Sticky Bottom CTAs: [ Chat ] (green) and [ Call / WhatsApp ] */}
-        <div className="p-3 bg-white border-t border-[#C9D2CD] grid grid-cols-2 gap-2 sticky bottom-0">
+        {/* Sticky Bottom CTAs */}
+        <div className="p-3 bg-white border-t border-[#C9D2CD] grid grid-cols-2 gap-2 sticky bottom-0 safe-bottom">
           <button
             onClick={() => onOpenChat(listing)}
             className="py-2.5 bg-[#0B7A3E] hover:bg-[#0F3D2A] text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition-all"
           >
-            <MessageSquare className="w-4 h-4" />
-            <span>Chat</span>
+            <MessageSquare className="w-4 h-4 shrink-0" />
+            <span className="truncate">Chat</span>
           </button>
           <button
             onClick={openWhatsApp}
             className="py-2.5 bg-[#EEF2F0] hover:bg-slate-200 text-[#0F3D2A] text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 border border-[#C9D2CD] active:scale-95 transition-all"
           >
-            <Phone className="w-4 h-4 text-[#0B7A3E]" />
-            <span>Call / WhatsApp</span>
+            <Phone className="w-4 h-4 text-[#0B7A3E] shrink-0" />
+            <span className="truncate">Call / WhatsApp</span>
           </button>
         </div>
       </div>

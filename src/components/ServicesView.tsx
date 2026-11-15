@@ -112,7 +112,7 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
   ];
 
   return (
-    <div className="flex flex-col bg-[#F6F8F9] min-h-[610px] font-sans select-none relative">
+    <div className="flex flex-col bg-[#F6F8F9] flex-1 min-h-full w-full max-w-full overflow-x-hidden font-sans select-none relative">
       {/* Clean White Header: Green Back Arrow, Bold Services, Right Language Button matching Screenshot 3 */}
       <div className="bg-white px-4 py-3 border-b border-slate-100 flex items-center justify-between sticky top-0 z-20">
         <div className="flex items-center gap-3">
@@ -150,17 +150,17 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
           <span>Customer Service</span>
         </button>
 
-        {/* 3 Feature Tiles Row matching Screenshot 3 (Gray Icon Box + Single Title) */}
-        <div className="grid grid-cols-3 gap-2.5">
+        {/* 3 Feature Tiles Row */}
+        <div className="grid grid-cols-3 gap-2 sm:gap-2.5">
           {/* Subscriptions */}
           <div
             onClick={() => setActiveSubView('subscriptions')}
-            className="bg-white p-3 rounded-2xl border border-slate-200/80 hover:border-[#0B7A3E] shadow-2xs cursor-pointer flex flex-col items-center justify-start text-center gap-2.5 transition-all"
+            className="min-w-0 bg-white p-2.5 sm:p-3 rounded-2xl border border-slate-200/80 hover:border-[#0B7A3E] shadow-2xs cursor-pointer flex flex-col items-center justify-start text-center gap-2 transition-all"
           >
-            <div className="w-11 h-11 rounded-xl bg-slate-100 text-[#0B7A3E] flex items-center justify-center">
+            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-slate-100 text-[#0B7A3E] flex items-center justify-center shrink-0">
               <FileSignature className="w-5 h-5 text-slate-600" />
             </div>
-            <span className="text-[11px] font-semibold text-slate-800 leading-tight">
+            <span className="text-[10.5px] sm:text-[11px] font-semibold text-slate-800 leading-tight break-words w-full">
               Subscriptions
             </span>
           </div>
@@ -168,25 +168,25 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
           {/* Selling and leasing Commission */}
           <div
             onClick={() => setActiveSubView('commission')}
-            className="bg-white p-3 rounded-2xl border border-slate-200/80 hover:border-[#0B7A3E] shadow-2xs cursor-pointer flex flex-col items-center justify-start text-center gap-2.5 transition-all"
+            className="min-w-0 bg-white p-2.5 sm:p-3 rounded-2xl border border-slate-200/80 hover:border-[#0B7A3E] shadow-2xs cursor-pointer flex flex-col items-center justify-start text-center gap-2 transition-all"
           >
-            <div className="w-11 h-11 rounded-xl bg-slate-100 text-[#0B7A3E] flex items-center justify-center">
+            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-slate-100 text-[#0B7A3E] flex items-center justify-center shrink-0">
               <Home className="w-5 h-5 text-[#0B7A3E]" />
             </div>
-            <span className="text-[11px] font-semibold text-slate-800 leading-tight">
+            <span className="text-[10.5px] sm:text-[11px] font-semibold text-slate-800 leading-tight break-words w-full">
               Selling and leasing Commission
             </span>
           </div>
 
-          {/* Developers Services (Rocket icon matching Screenshot 3) */}
+          {/* Developers Services */}
           <div
             onClick={() => setActiveSubView('developers')}
-            className="bg-white p-3 rounded-2xl border border-slate-200/80 hover:border-[#0B7A3E] shadow-2xs cursor-pointer flex flex-col items-center justify-start text-center gap-2.5 transition-all"
+            className="min-w-0 bg-white p-2.5 sm:p-3 rounded-2xl border border-slate-200/80 hover:border-[#0B7A3E] shadow-2xs cursor-pointer flex flex-col items-center justify-start text-center gap-2 transition-all"
           >
-            <div className="w-11 h-11 rounded-xl bg-slate-100 text-[#0B7A3E] flex items-center justify-center">
+            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-slate-100 text-[#0B7A3E] flex items-center justify-center shrink-0">
               <Rocket className="w-5 h-5 text-[#0B7A3E]" />
             </div>
-            <span className="text-[11px] font-semibold text-slate-800 leading-tight">
+            <span className="text-[10.5px] sm:text-[11px] font-semibold text-slate-800 leading-tight break-words w-full">
               Developers Services
             </span>
           </div>
@@ -306,7 +306,7 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
 
       {/* Sub-view Sheet / Modal */}
       {activeSubView && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+        <div className="fixed inset-0 z-[500] bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
           <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-200 my-auto animate-in zoom-in-95 duration-150 p-5 space-y-4">
             <div className="flex items-center justify-between pb-2 border-b border-slate-100">
               <h3 className="text-sm font-bold text-slate-900 capitalize">

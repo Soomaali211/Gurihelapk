@@ -41,9 +41,9 @@ export const ChatView: React.FC<ChatViewProps> = ({
   };
 
   return (
-    <div className="flex flex-col bg-[#F8FAFC] min-h-[580px] font-sans pb-16 select-none relative">
+    <div className="flex flex-col bg-[#F8FAFC] flex-1 min-h-0 h-full w-full max-w-full font-sans select-none relative overflow-hidden">
       {/* Item 1: Header: [ ← ] Broker avatar + Broker name + "online" */}
-      <div className="bg-white px-3.5 py-2.5 border-b border-[#C9D2CD] flex items-center justify-between shadow-2xs sticky top-0 z-20">
+      <div className="bg-white px-3.5 py-2.5 border-b border-[#C9D2CD] flex items-center justify-between shadow-2xs shrink-0 z-20">
         <div className="flex items-center gap-2.5">
           <button
             onClick={onBack}
@@ -75,25 +75,25 @@ export const ChatView: React.FC<ChatViewProps> = ({
         onClick={() => {
           if (onOpenListingDetail) onOpenListingDetail('A1042');
         }}
-        className="mx-3 mt-2.5 p-2.5 bg-white rounded-2xl border border-[#C9D2CD] hover:border-[#0B7A3E] shadow-2xs flex items-center justify-between cursor-pointer transition-all"
+        className="mx-3 mt-2.5 p-2.5 bg-white rounded-2xl border border-[#C9D2CD] hover:border-[#0B7A3E] shadow-2xs flex items-center justify-between gap-2 cursor-pointer transition-all shrink-0"
       >
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 min-w-0">
           <img
             src="https://images.unsplash.com/photo-1613977257363-707ba9348227?auto=format&fit=crop&w=200&q=80"
             alt="Villa #A1042"
-            className="w-11 h-11 rounded-xl object-cover"
+            className="w-11 h-11 rounded-xl object-cover shrink-0"
           />
-          <div>
-            <div className="text-xs font-black text-[#0F3D2A]">
+          <div className="min-w-0">
+            <div className="text-xs font-black text-[#0F3D2A] truncate">
               Villa · 250,000 USD
             </div>
-            <div className="text-[10px] text-slate-500 font-medium">
+            <div className="text-[10px] text-slate-500 font-medium truncate">
               Listing #A1042
             </div>
           </div>
         </div>
 
-        <span className="text-[10px] font-bold text-[#0B7A3E] bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
+        <span className="text-[10px] font-bold text-[#0B7A3E] bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 shrink-0 whitespace-nowrap">
           Eeg Faahfaahin
         </span>
       </div>
@@ -152,19 +152,19 @@ export const ChatView: React.FC<ChatViewProps> = ({
       {/* Item 4: Composer: "Qor fariin..." and Send button */}
       <form
         onSubmit={handleSend}
-        className="p-2.5 bg-white border-t border-[#C9D2CD] flex items-center gap-2 sticky bottom-0 z-20"
+        className="p-2.5 bg-white border-t border-[#C9D2CD] flex items-center gap-2 shrink-0 z-20"
       >
         <input
           type="text"
           value={inputText}
           onChange={(e) => setInputText(e.target.value)}
           placeholder="Qor fariin..."
-          className="flex-1 h-9 px-3 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-[#0B7A3E] outline-none"
+          className="flex-1 min-w-0 h-9 px-3 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-[#0B7A3E] outline-none"
         />
         <button
           type="submit"
           disabled={!inputText.trim()}
-          className="h-9 px-4 bg-[#0B7A3E] hover:bg-[#0F3D2A] text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1 shadow-xs transition-colors disabled:opacity-40"
+          className="h-9 px-3.5 sm:px-4 bg-[#0B7A3E] hover:bg-[#0F3D2A] text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1 shadow-xs transition-colors disabled:opacity-40 shrink-0"
         >
           <Send className="w-3 h-3" />
           <span>Dir</span>

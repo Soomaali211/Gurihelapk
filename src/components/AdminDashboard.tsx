@@ -105,9 +105,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       </div>
 
       {/* KPI Cards Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
         {/* KPI 1 */}
-        <div className="bg-white p-5 rounded-3xl border border-[#C9D2CD] shadow-xs space-y-2">
+        <div className="bg-white p-3.5 sm:p-5 rounded-3xl border border-[#C9D2CD] shadow-xs space-y-2 min-w-0">
           <div className="flex items-center justify-between text-slate-500">
             <span className="text-xs font-bold uppercase tracking-wider">Macaamiisha (Users)</span>
             <Users className="w-4 h-4 text-[#0B7A3E]" />
@@ -266,7 +266,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 w-full sm:w-auto justify-end pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+                  <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
                     <button
                       onClick={() => onViewListingDetail(listing)}
                       className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-xs font-bold text-slate-700 rounded-xl transition-colors"
@@ -376,14 +376,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               { id: 'TX-8802', user: 'Hodan Real Estate', service: 'Pro Subscription', amount: '$40', status: 'Paid (eDahab)' },
               { id: 'TX-8803', user: 'Dahabshiil Group', service: 'Featured Placement', amount: '$150', status: 'Paid (Zaad)' },
             ].map((tx, i) => (
-              <div key={i} className="p-3 bg-slate-50 rounded-xl flex items-center justify-between text-xs">
-                <div>
+              <div key={i} className="p-3 bg-slate-50 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                <div className="min-w-0">
                   <span className="font-mono font-bold text-slate-500 mr-2">{tx.id}</span>
                   <span className="font-bold text-slate-800">{tx.user}</span>
                   <span className="text-slate-400 mx-1">·</span>
                   <span className="text-slate-500">{tx.service}</span>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 shrink-0">
                   <span className="font-bold text-[#0B7A3E] tabular-nums">{tx.amount}</span>
                   <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[10px] font-bold">
                     {tx.status}
