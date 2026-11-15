@@ -146,8 +146,8 @@ export const MobileAppShell: React.FC<MobileAppShellProps> = ({
             : 'max-w-5xl rounded-3xl border border-[#C9D2CD] shadow-lg bg-white overflow-hidden'
         }`}
       >
-        {/* Clean Light Status Bar matching Screenshots 1-6 */}
-        <PhoneStatusBar time="10:36" batteryPercentage={51} />
+        {/* Clean Light Status Bar (Browser preview only; Android OS provides native bar inside APK) */}
+        {!isNativeApk && <PhoneStatusBar time="10:36" batteryPercentage={51} />}
 
         {/* Dynamic Screen View */}
         <div className="relative min-h-[610px] bg-[#F6F8F9]">

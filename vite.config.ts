@@ -7,8 +7,15 @@ import { defineConfig } from 'vite';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig(() => {
+  const appVersion = process.env.ANDROID_VERSION_NAME || '4.0.3';
+  const appBuild = process.env.ANDROID_VERSION_CODE || '401';
+
   return {
     plugins: [react(), tailwindcss()],
+    define: {
+      __APP_VERSION__: JSON.stringify(appVersion),
+      __APP_BUILD__: JSON.stringify(appBuild),
+    },
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),

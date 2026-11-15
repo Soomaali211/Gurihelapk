@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import {
   Listing,
@@ -26,6 +26,11 @@ import { TechStackModal } from './components/TechStackModal';
 import { auth } from './lib/firebase';
 import { executeAiSearch } from './lib/aiSearch';
 import {
+  APP_VERSION,
+  loadPersistedState,
+  savePersistedPatch,
+} from './lib/localStore';
+import {
   isVerifiedAdmin,
   syncUserProfileDocuments,
   subscribePublicAndUserListings,
@@ -39,10 +44,30 @@ import {
   seedMarketplaceToFirestore,
 } from './lib/firestoreRepo';
 
+function mergeListingsUnique(primary: Listing[], secondary: Listing[]): Listing[] {
+  const seen = new Set<string>();
+  const out: Listing[] = [];
+  for (const item of [...primary, ...secondary]) {
+    if (!seen.has(item.id)) {
+      seen.add(item.id);
+      out.push(item);
+    }
+  }
+  return out;
+}
+
 export default function App() {
+  const bootRef = useRef(loadPersistedState());
+  const initialPersisted = bootRef.current.state;
+
   const [currentView, setCurrentView] = useState<'mobile' | 'admin'>('mobile');
-  const [userRole, setUserRole] = useState<UserRole>('seeker');
+  const [userRole, setUserRole] = useState<UserRole>(initialPersisted.userRole);
   const [showTechStack, setShowTechStack] = useState(false);
+  const [upgradeBanner, setUpgradeBanner] = useState<string | null>(
+    bootRef.current.upgradedFromVersion
+      ? `App-ka waa la cusboonaysiiyay: v${bootRef.current.upgradedFromVersion} → v${APP_VERSION}. Dhammaan xogtaadii hore way badbaadsan tahay!`
+      : null
+  );
 
   // Firebase Auth state
   const [authReady, setAuthReady] = useState(false);
@@ -50,13 +75,21 @@ export default function App() {
   const [firestoreError, setFirestoreError] = useState<string | null>(null);
   const [hasCloudListings, setHasCloudListings] = useState(false);
 
-  // Core Data Stores (initialized with Somaliland defaults, synchronized with Firestore)
-  const [listings, setListings] = useState<Listing[]>(INITIAL_LISTINGS);
+  // Core Data Stores (initialized from versioned local store + defaults, synced with Firestore)
+  const [listings, setListings] = useState<Listing[]>(() =>
+    mergeListingsUnique(initialPersisted.customListings, INITIAL_LISTINGS)
+  );
   const [projects, setProjects] = useState<Project[]>(INITIAL_PROJECTS);
-  const [favorites, setFavorites] = useState<string[]>(['A1042', 'wf-65k']);
-  const [chatThreads, setChatThreads] = useState<ChatThread[]>(INITIAL_CHAT_THREADS);
-  const [searchRequests, setSearchRequests] = useState<SearchRequest[]>(INITIAL_SEARCH_REQUESTS);
-  const [leaseContracts, setLeaseContracts] = useState<LeaseContract[]>(INITIAL_LEASE_CONTRACTS);
+  const [favorites, setFavorites] = useState<string[]>(initialPersisted.favorites);
+  const [chatThreads, setChatThreads] = useState<ChatThread[]>(
+    initialPersisted.chatThreads || INITIAL_CHAT_THREADS
+  );
+  const [searchRequests, setSearchRequests] = useState<SearchRequest[]>(
+    initialPersisted.searchRequests || INITIAL_SEARCH_REQUESTS
+  );
+  const [leaseContracts, setLeaseContracts] = useState<LeaseContract[]>(
+    initialPersisted.leaseContracts || INITIAL_LEASE_CONTRACTS
+  );
 
   // Filters State
   const [purposeFilter, setPurposeFilter] = useState<'all' | ListingPurpose>('all');
@@ -87,6 +120,17 @@ export default function App() {
   // Admin Modal Inspector
   const [inspectListing, setInspectListing] = useState<Listing | null>(null);
 
+  // Persist core user preferences/drafts locally so APK updates never lose offline data
+  useEffect(() => {
+    savePersistedPatch({
+      userRole,
+      favorites,
+      chatThreads,
+      searchRequests,
+      leaseContracts,
+    });
+  }, [userRole, favorites, chatThreads, searchRequests, leaseContracts]);
+
   // 1. Auth Listener
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
@@ -114,12 +158,13 @@ export default function App() {
     const unsubListings = subscribePublicAndUserListings(
       firebaseUser,
       (cloudItems) => {
+        const localCustom = loadPersistedState().state.customListings;
         if (cloudItems.length > 0) {
           setHasCloudListings(true);
-          setListings(cloudItems);
+          setListings(mergeListingsUnique(cloudItems, localCustom));
         } else {
           setHasCloudListings(false);
-          setListings(INITIAL_LISTINGS);
+          setListings(mergeListingsUnique(localCustom, INITIAL_LISTINGS));
         }
       },
       (err) => setFirestoreError(err.message)
@@ -134,7 +179,9 @@ export default function App() {
     let unsubFavs: (() => void) | undefined;
     if (firebaseUser) {
       unsubFavs = subscribeFavorites(firebaseUser.uid, (ids) => {
-        setFavorites(ids);
+        if (ids.length > 0) {
+          setFavorites(ids);
+        }
       });
     }
 
@@ -145,7 +192,7 @@ export default function App() {
     };
   }, [authReady, firebaseUser]);
 
-  // AI Search Handler (Server Gemini API with offline APK NLP fallback)
+  // AI Search Handler
   const handleAiSearch = async (queryText: string) => {
     setIsSearchingAi(true);
     try {
@@ -180,9 +227,12 @@ export default function App() {
     setTypeFilter('all');
   };
 
-  // Add Listing (writes to Firestore if signed in, otherwise local state)
+  // Add Listing (persists both locally for offline/update safety and in Firestore)
   const handleAddListing = async (newListing: Listing) => {
-    setListings((prev) => [newListing, ...prev]);
+    setListings((prev) => mergeListingsUnique([newListing], prev));
+    const currentCustom = loadPersistedState().state.customListings;
+    savePersistedPatch({ customListings: mergeListingsUnique([newListing], currentCustom) });
+
     if (firebaseUser) {
       try {
         await createListingInFirestore(newListing, firebaseUser);
@@ -197,6 +247,11 @@ export default function App() {
     setListings((prev) =>
       prev.map((l) => (l.id === id ? { ...l, status: 'live', verified: true } : l))
     );
+    const updatedCustom = loadPersistedState().state.customListings.map((l) =>
+      l.id === id ? { ...l, status: 'live' as const, verified: true } : l
+    );
+    savePersistedPatch({ customListings: updatedCustom });
+
     if (firebaseUser && isVerifiedAdmin(firebaseUser)) {
       try {
         await updateListingModerationInFirestore(id, { status: 'live' });
@@ -213,6 +268,11 @@ export default function App() {
         l.id === id ? { ...l, status: 'rejected', rejectionReason: reason } : l
       )
     );
+    const updatedCustom = loadPersistedState().state.customListings.map((l) =>
+      l.id === id ? { ...l, status: 'rejected' as const, rejectionReason: reason } : l
+    );
+    savePersistedPatch({ customListings: updatedCustom });
+
     if (firebaseUser && isVerifiedAdmin(firebaseUser)) {
       try {
         await updateListingModerationInFirestore(id, {
@@ -360,6 +420,15 @@ export default function App() {
         isSearchingAi={isSearchingAi}
         onOpenTechStack={() => setShowTechStack(true)}
       />
+
+      {upgradeBanner && (
+        <div className="bg-emerald-50 border-b border-emerald-200 px-4 py-2 text-[11px] font-bold text-[#0B7A3E] flex items-center justify-between">
+          <span>✓ {upgradeBanner}</span>
+          <button onClick={() => setUpgradeBanner(null)} className="ml-3 shrink-0">
+            ✕
+          </button>
+        </div>
+      )}
 
       {firestoreError && (
         <div className="bg-amber-50 border-b border-amber-200 px-4 py-1.5 text-[11px] text-amber-900 flex items-center justify-between">

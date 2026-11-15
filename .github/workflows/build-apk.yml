@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   build-android-apk:
-    name: Build GuriHel APK
+    name: Build Signed GuriHel APK
     runs-on: ubuntu-latest
 
     steps:
@@ -23,7 +23,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'npm'
 
       - name: Setup Java JDK 21
         uses: actions/setup-java@v4
@@ -40,25 +39,45 @@ jobs:
       - name: Build web bundle (Vite)
         env:
           VITE_API_BASE_URL: https://ais-pre-fkdyozsv76cejphilj3vft-357698603471.europe-west2.run.app
+          ANDROID_VERSION_CODE: ${{ 400 + github.run_number }}
+          ANDROID_VERSION_NAME: 4.0.${{ 3 + github.run_number }}
         run: npm run build
 
-      - name: Initialize & Sync Capacitor Android
+      - name: Sync Capacitor Android assets
         run: |
           if [ ! -d "android" ]; then
             npx cap add android
           fi
           npx cap sync android
 
-      - name: Build Android APK
+      - name: Configure Optional Custom Release Keystore Secret
+        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > android/app/custom-release.keystore
+
+      - name: Build Signed Release APK
         working-directory: android
+        env:
+          ANDROID_VERSION_CODE: ${{ 400 + github.run_number }}
+          ANDROID_VERSION_NAME: 4.0.${{ 3 + github.run_number }}
+          ANDROID_KEYSTORE_PATH: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' && 'custom-release.keystore' || 'gurihel-signing.p12' }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD || 'gurihel2026' }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS || 'gurihel' }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD || 'gurihel2026' }}
         run: |
           chmod +x ./gradlew
-          ./gradlew assembleDebug
+          ./gradlew assembleRelease
 
-      - name: Rename APK for Release
+      - name: Verify APK Signature & Version
         run: |
+          APK_PATH="android/app/build/outputs/apk/release/app-release.apk"
+          test -f "$APK_PATH"
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name "apksigner" | sort -V | tail -n 1)
+          if [ -n "$APKSIGNER" ]; then
+            "$APKSIGNER" verify --print-certs "$APK_PATH"
+          fi
           mkdir -p release-apk
-          cp android/app/build/outputs/apk/debug/app-debug.apk release-apk/GuriHel-android.apk
+          cp "$APK_PATH" release-apk/GuriHel-android.apk
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
@@ -70,12 +89,12 @@ jobs:
       - name: Publish APK to GitHub Releases
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v4.0.${{ github.run_number }}
-          name: GuriHel Android APK (v4.0.${{ github.run_number }})
+          tag_name: v4.0.${{ 3 + github.run_number }}
+          name: GuriHel Android APK (v4.0.${{ 3 + github.run_number }})
           body: |
-            GuriHel Android APK oo diyaar u ah in si toos ah loo install-gareeyo.
-            - Capacitor Android + React UI + Firebase Firestore & Auth
-            - Soo dejiso faylka `GuriHel-android.apk` hoose kadibna ku dhufo Install.
+            GuriHel Android APK (v4.0.${{ 3 + github.run_number }} / Build ${{ 400 + github.run_number }}) oo diyaar u ah in si toos ah loo install-gareeyo ama loogu update-gareeyo kii hore.
+            - **In-Place Update Safe:** Wuxuu leeyahay saxiix (keystore) joogto ah iyo versionCode kordhaya si xogtii hore aanay u lumin.
+            - Soo dejiso **`GuriHel-android.apk`** kadibna ku dhufo **Install / Update**.
           files: release-apk/GuriHel-android.apk
           draft: false
           prerelease: false
