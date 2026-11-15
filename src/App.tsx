@@ -1,37 +1,59 @@
-import React, { useState } from 'react';
-import { 
-  Listing, 
-  Project, 
-  ChatThread, 
-  SearchRequest, 
-  LeaseContract, 
-  UserRole, 
-  ListingPurpose, 
-  PropertyType, 
-  FilterState 
+import React, { useState, useEffect } from 'react';
+import { onAuthStateChanged, User } from 'firebase/auth';
+import {
+  Listing,
+  Project,
+  ChatThread,
+  SearchRequest,
+  LeaseContract,
+  UserRole,
+  ListingPurpose,
+  PropertyType,
+  FilterState,
 } from './types';
-import { 
-  INITIAL_LISTINGS, 
-  INITIAL_PROJECTS, 
-  INITIAL_CHAT_THREADS, 
-  INITIAL_SEARCH_REQUESTS, 
-  INITIAL_LEASE_CONTRACTS 
+import {
+  INITIAL_LISTINGS,
+  INITIAL_PROJECTS,
+  INITIAL_CHAT_THREADS,
+  INITIAL_SEARCH_REQUESTS,
+  INITIAL_LEASE_CONTRACTS,
 } from './data/mockData';
 import { TopBar } from './components/TopBar';
 import { MobileAppShell } from './components/MobileAppShell';
 import { AdminDashboard } from './components/AdminDashboard';
 import { ListingDetailModal } from './components/ListingDetailModal';
 import { TechStackModal } from './components/TechStackModal';
+import { auth } from './lib/firebase';
+import { executeAiSearch } from './lib/aiSearch';
+import {
+  isVerifiedAdmin,
+  syncUserProfileDocuments,
+  subscribePublicAndUserListings,
+  subscribeProjects,
+  subscribeFavorites,
+  toggleFavoriteInFirestore,
+  createListingInFirestore,
+  updateListingModerationInFirestore,
+  createSearchRequestInFirestore,
+  createLeaseContractInFirestore,
+  seedMarketplaceToFirestore,
+} from './lib/firestoreRepo';
 
 export default function App() {
-  // Main view: Mobile App (with 6 tabs) vs Admin Management Dashboard
   const [currentView, setCurrentView] = useState<'mobile' | 'admin'>('mobile');
   const [userRole, setUserRole] = useState<UserRole>('seeker');
   const [showTechStack, setShowTechStack] = useState(false);
 
-  // Core Data Stores
+  // Firebase Auth state
+  const [authReady, setAuthReady] = useState(false);
+  const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
+  const [firestoreError, setFirestoreError] = useState<string | null>(null);
+  const [hasCloudListings, setHasCloudListings] = useState(false);
+
+  // Core Data Stores (initialized with Somaliland defaults, synchronized with Firestore)
   const [listings, setListings] = useState<Listing[]>(INITIAL_LISTINGS);
   const [projects, setProjects] = useState<Project[]>(INITIAL_PROJECTS);
+  const [favorites, setFavorites] = useState<string[]>(['A1042', 'wf-65k']);
   const [chatThreads, setChatThreads] = useState<ChatThread[]>(INITIAL_CHAT_THREADS);
   const [searchRequests, setSearchRequests] = useState<SearchRequest[]>(INITIAL_SEARCH_REQUESTS);
   const [leaseContracts, setLeaseContracts] = useState<LeaseContract[]>(INITIAL_LEASE_CONTRACTS);
@@ -65,38 +87,86 @@ export default function App() {
   // Admin Modal Inspector
   const [inspectListing, setInspectListing] = useState<Listing | null>(null);
 
-  // AI Search Handler
-  const handleAiSearch = async (query: string) => {
-    setIsSearchingAi(true);
-    try {
-      const response = await fetch('/api/ai/search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query }),
-      });
-      const data = await response.json();
-
-      if (data?.result) {
-        const res = data.result;
-        setAiCriteria(res);
-        setAiExplanation(res.explanation || `Natiijada baadhitaanka AI: "${query}"`);
-        setAiFilterActive(true);
-
-        // Synchronize top filters if detected
-        if (res.purpose && res.purpose !== 'any') {
-          setPurposeFilter(res.purpose as ListingPurpose);
-        } else {
-          setPurposeFilter('all');
-        }
-
-        if (res.property_type && res.property_type !== 'all') {
-          setTypeFilter(res.property_type as PropertyType);
-        } else {
-          setTypeFilter('all');
+  // 1. Auth Listener
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, async (user) => {
+      setFirebaseUser(user);
+      setAuthReady(true);
+      if (user) {
+        try {
+          const role = await syncUserProfileDocuments(user);
+          setUserRole(role);
+          if (isVerifiedAdmin(user)) {
+            await seedMarketplaceToFirestore(user);
+          }
+        } catch (err) {
+          console.warn('Profile sync notice:', err);
         }
       }
+    });
+    return () => unsub();
+  }, []);
+
+  // 2. Real-time Firestore Subscriptions (gated by authReady)
+  useEffect(() => {
+    if (!authReady) return;
+
+    const unsubListings = subscribePublicAndUserListings(
+      firebaseUser,
+      (cloudItems) => {
+        if (cloudItems.length > 0) {
+          setHasCloudListings(true);
+          setListings(cloudItems);
+        } else {
+          setHasCloudListings(false);
+          setListings(INITIAL_LISTINGS);
+        }
+      },
+      (err) => setFirestoreError(err.message)
+    );
+
+    const unsubProjects = subscribeProjects((cloudProjects) => {
+      if (cloudProjects.length > 0) {
+        setProjects(cloudProjects);
+      }
+    });
+
+    let unsubFavs: (() => void) | undefined;
+    if (firebaseUser) {
+      unsubFavs = subscribeFavorites(firebaseUser.uid, (ids) => {
+        setFavorites(ids);
+      });
+    }
+
+    return () => {
+      unsubListings();
+      unsubProjects();
+      if (unsubFavs) unsubFavs();
+    };
+  }, [authReady, firebaseUser]);
+
+  // AI Search Handler (Server Gemini API with offline APK NLP fallback)
+  const handleAiSearch = async (queryText: string) => {
+    setIsSearchingAi(true);
+    try {
+      const res = await executeAiSearch(queryText);
+      setAiCriteria(res);
+      setAiExplanation(res.explanation || `Natiijada baadhitaanka AI: "${queryText}"`);
+      setAiFilterActive(true);
+
+      if (res.purpose && res.purpose !== 'any') {
+        setPurposeFilter(res.purpose as ListingPurpose);
+      } else {
+        setPurposeFilter('all');
+      }
+
+      if (res.property_type && res.property_type !== 'all') {
+        setTypeFilter(res.property_type as PropertyType);
+      } else {
+        setTypeFilter('all');
+      }
     } catch (err) {
-      console.warn('AI search request failed, keeping manual filters:', err);
+      console.warn('AI search failed:', err);
     } finally {
       setIsSearchingAi(false);
     }
@@ -110,25 +180,83 @@ export default function App() {
     setTypeFilter('all');
   };
 
-  // Add Listing (starts in 'pending' status for admin approval)
-  const handleAddListing = (newListing: Listing) => {
+  // Add Listing (writes to Firestore if signed in, otherwise local state)
+  const handleAddListing = async (newListing: Listing) => {
     setListings((prev) => [newListing, ...prev]);
+    if (firebaseUser) {
+      try {
+        await createListingInFirestore(newListing, firebaseUser);
+      } catch (err) {
+        setFirestoreError(err instanceof Error ? err.message : 'Failed to save listing');
+      }
+    }
   };
 
   // Admin Approval
-  const handleApproveListing = (id: string) => {
+  const handleApproveListing = async (id: string) => {
     setListings((prev) =>
       prev.map((l) => (l.id === id ? { ...l, status: 'live', verified: true } : l))
     );
+    if (firebaseUser && isVerifiedAdmin(firebaseUser)) {
+      try {
+        await updateListingModerationInFirestore(id, { status: 'live' });
+      } catch (err) {
+        setFirestoreError(err instanceof Error ? err.message : 'Approval error');
+      }
+    }
   };
 
   // Admin Rejection
-  const handleRejectListing = (id: string, reason: string) => {
+  const handleRejectListing = async (id: string, reason: string) => {
     setListings((prev) =>
       prev.map((l) =>
         l.id === id ? { ...l, status: 'rejected', rejectionReason: reason } : l
       )
     );
+    if (firebaseUser && isVerifiedAdmin(firebaseUser)) {
+      try {
+        await updateListingModerationInFirestore(id, {
+          status: 'rejected',
+          rejectionReason: reason,
+        });
+      } catch (err) {
+        setFirestoreError(err instanceof Error ? err.message : 'Reject error');
+      }
+    }
+  };
+
+  const handleToggleFavorite = async (id: string) => {
+    const exists = favorites.includes(id);
+    setFavorites((prev) => (exists ? prev.filter((x) => x !== id) : [...prev, id]));
+    if (firebaseUser) {
+      try {
+        await toggleFavoriteInFirestore(firebaseUser.uid, id, !exists);
+      } catch (err) {
+        console.warn('Favorite sync error:', err);
+      }
+    }
+  };
+
+  const handleAddSearchRequest = async (req: SearchRequest) => {
+    setSearchRequests((prev) => [req, ...prev]);
+    if (firebaseUser) {
+      try {
+        await createSearchRequestInFirestore(req, firebaseUser);
+      } catch (err) {
+        console.warn('Search request sync error:', err);
+      }
+    }
+  };
+
+  const handleAddLeaseContract = async (contract: LeaseContract) => {
+    setLeaseContracts((prev) => [contract, ...prev]);
+    if (firebaseUser) {
+      try {
+        await createLeaseContractInFirestore(contract, firebaseUser);
+      } catch (err) {
+        console.warn('Lease contract sync error:', err);
+      }
+    }
   };
 
   // Chat message sending with automatic simulated broker reply
@@ -153,7 +281,6 @@ export default function App() {
       )
     );
 
-    // Automated broker response after 1 second
     setTimeout(() => {
       const brokerReplies = [
         'Waa hagaag walaal, waan helay fariintaada. Goorma ayaad doonaysaa inaan guriga kugu tuso?',
@@ -186,14 +313,13 @@ export default function App() {
 
   // Filter listings based on current active filters
   const filteredListings = listings.filter((listing) => {
-    // Purpose filter
     if (purposeFilter !== 'all' && listing.purpose !== purposeFilter) return false;
-
-    // Property type filter
     if (typeFilter !== 'all' && listing.property_type !== typeFilter) return false;
 
-    // Advanced filters
-    if (advancedFilters.district && !listing.district.toLowerCase().includes(advancedFilters.district.toLowerCase())) {
+    if (
+      advancedFilters.district &&
+      !listing.district.toLowerCase().includes(advancedFilters.district.toLowerCase())
+    ) {
       return false;
     }
 
@@ -202,9 +328,11 @@ export default function App() {
     if (advancedFilters.onlyVerified && !listing.verified) return false;
     if (advancedFilters.onlyFeatured && !listing.featured) return false;
 
-    // AI Semantic criteria matching if active
     if (aiFilterActive && aiCriteria) {
-      if (aiCriteria.district && !listing.district.toLowerCase().includes(aiCriteria.district.toLowerCase())) {
+      if (
+        aiCriteria.district &&
+        !listing.district.toLowerCase().includes(aiCriteria.district.toLowerCase())
+      ) {
         return false;
       }
       if (aiCriteria.maxPrice && listing.price > aiCriteria.maxPrice) {
@@ -220,7 +348,6 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-[#18211C] flex flex-col font-sans">
-      {/* Top Bar with AI Search and Dual Viewport controls */}
       <TopBar
         currentView={currentView}
         onViewChange={(view) => setCurrentView(view)}
@@ -234,7 +361,18 @@ export default function App() {
         onOpenTechStack={() => setShowTechStack(true)}
       />
 
-      {/* Main Content Area */}
+      {firestoreError && (
+        <div className="bg-amber-50 border-b border-amber-200 px-4 py-1.5 text-[11px] text-amber-900 flex items-center justify-between">
+          <span className="truncate">Firebase Notice: {firestoreError}</span>
+          <button
+            onClick={() => setFirestoreError(null)}
+            className="font-bold text-amber-700 ml-3 shrink-0"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       <div className="flex-1">
         {currentView === 'mobile' ? (
           <MobileAppShell
@@ -246,8 +384,8 @@ export default function App() {
             userRole={userRole}
             onRoleChange={setUserRole}
             onAddListing={handleAddListing}
-            onAddSearchRequest={(req) => setSearchRequests((prev) => [req, ...prev])}
-            onAddLeaseContract={(contract) => setLeaseContracts((prev) => [contract, ...prev])}
+            onAddSearchRequest={handleAddSearchRequest}
+            onAddLeaseContract={handleAddLeaseContract}
             onSendMessage={handleSendMessage}
             filteredListings={filteredListings}
             purposeFilter={purposeFilter}
@@ -268,6 +406,9 @@ export default function App() {
                 onlyFeatured: false,
               })
             }
+            firebaseUser={firebaseUser}
+            favorites={favorites}
+            onToggleFavorite={handleToggleFavorite}
           />
         ) : (
           <AdminDashboard
@@ -275,11 +416,17 @@ export default function App() {
             onApproveListing={handleApproveListing}
             onRejectListing={handleRejectListing}
             onViewListingDetail={(listing) => setInspectListing(listing)}
+            firebaseUser={firebaseUser}
+            hasCloudListings={hasCloudListings}
+            onSeedDatabase={async () => {
+              if (firebaseUser && isVerifiedAdmin(firebaseUser)) {
+                await seedMarketplaceToFirestore(firebaseUser);
+              }
+            }}
           />
         )}
       </div>
 
-      {/* Admin Inspector Detail Modal */}
       {inspectListing && (
         <ListingDetailModal
           listing={inspectListing}
@@ -292,12 +439,11 @@ export default function App() {
             setInspectListing(null);
             setCurrentView('mobile');
           }}
-          isFavorite={false}
-          onToggleFavorite={() => {}}
+          isFavorite={favorites.includes(inspectListing.id)}
+          onToggleFavorite={() => handleToggleFavorite(inspectListing.id)}
         />
       )}
 
-      {/* Tech Stack & Blueprint Verbatim Modal */}
       <TechStackModal
         isOpen={showTechStack}
         onClose={() => setShowTechStack(false)}

@@ -25,6 +25,16 @@ const PORT = cliPort ? parseInt(cliPort, 10) : (process.env.PORT ? parseInt(proc
 const HOST = getArgValue('--host') || '0.0.0.0';
 
 app.use(express.json());
+app.use((req: Request, res: Response, next: NextFunction) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(204);
+    return;
+  }
+  next();
+});
 
 // Lazy-load Gemini SDK so server binds port 3000 immediately on cold start
 const apiKey = process.env.GEMINI_API_KEY || '';

@@ -1,0 +1,301 @@
+{
+  "entities": {
+    "UserPublic": {
+      "title": "UserPublic",
+      "description": "Publicly safe user profile fields without PII",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "role": { "type": "string", "enum": ["seeker", "owner", "broker", "developer", "admin"] },
+        "city": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "language": { "type": "string", "enum": ["SO", "EN", "AR"] },
+        "avatarUrl": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "displayName", "role", "city", "createdAt", "updatedAt"]
+    },
+    "UserPrivate": {
+      "title": "UserPrivate",
+      "description": "Isolated PII document for user email, phone, and KYC verification status",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "email": { "type": "string", "maxLength": 160 },
+        "phone": { "type": "string", "maxLength": 32 },
+        "kycStatus": { "type": "string", "enum": ["none", "submitted", "verified"] },
+        "kycDocumentRef": { "type": "string", "maxLength": 300 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "kycStatus", "updatedAt"]
+    },
+    "AdminRecord": {
+      "title": "AdminRecord",
+      "description": "Trusted admin allowlist entry",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "email": { "type": "string", "maxLength": 160 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "createdAt"]
+    },
+    "Favorite": {
+      "title": "Favorite",
+      "description": "Saved property reference for a user",
+      "type": "object",
+      "properties": {
+        "ownerUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "listingId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerUid", "listingId", "createdAt"]
+    },
+    "Listing": {
+      "title": "Listing",
+      "description": "Real estate marketplace property listing",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "ownerUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "title": { "type": "string", "minLength": 2, "maxLength": 160 },
+        "description": { "type": "string", "maxLength": 2000 },
+        "purpose": { "type": "string", "enum": ["rent", "sale", "booking"] },
+        "property_type": { "type": "string", "enum": ["villa", "apartment", "land", "commercial", "building"] },
+        "price": { "type": "number" },
+        "currency": { "type": "string", "enum": ["USD", "SLSH"] },
+        "price_unit": { "type": "string", "enum": ["total", "month", "year", "night"] },
+        "area_m2": { "type": "number" },
+        "bedrooms": { "type": "number" },
+        "living_rooms": { "type": "number" },
+        "bathrooms": { "type": "number" },
+        "city": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "district": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "address": { "type": "string", "maxLength": 200 },
+        "lat": { "type": "number" },
+        "lng": { "type": "number" },
+        "verified": { "type": "boolean" },
+        "featured": { "type": "boolean" },
+        "status": { "type": "string", "enum": ["live", "pending", "rejected", "sold"] },
+        "images": { "type": "array", "description": "Max 10 URLs" },
+        "amenities": { "type": "array", "description": "Max 20 tags" },
+        "broker": { "type": "object" },
+        "views": { "type": "number" },
+        "rejectionReason": { "type": "string", "maxLength": 300 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id", "ownerUid", "title", "description", "purpose", "property_type",
+        "price", "currency", "price_unit", "area_m2", "bedrooms", "living_rooms",
+        "bathrooms", "city", "district", "address", "lat", "lng", "verified",
+        "featured", "status", "images", "amenities", "broker", "views",
+        "createdAt", "updatedAt"
+      ]
+    },
+    "Project": {
+      "title": "Project",
+      "description": "Developer residential or commercial project",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "minLength": 2, "maxLength": 140 },
+        "developerName": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "developerLogo": { "type": "string", "maxLength": 500 },
+        "city": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "district": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "address": { "type": "string", "maxLength": 200 },
+        "stage": { "type": "string", "enum": ["off_plan", "building", "ready"] },
+        "startingPrice": { "type": "number" },
+        "currency": { "type": "string", "enum": ["USD"] },
+        "types": { "type": "array" },
+        "heroImage": { "type": "string", "maxLength": 500 },
+        "featured": { "type": "boolean" },
+        "handoverDate": { "type": "string", "maxLength": 40 },
+        "units": { "type": "array" },
+        "description": { "type": "string", "maxLength": 2000 },
+        "leadsCount": { "type": "number" },
+        "progressPercent": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id", "name", "developerName", "developerLogo", "city", "district",
+        "address", "stage", "startingPrice", "currency", "types", "heroImage",
+        "featured", "handoverDate", "units", "description", "leadsCount",
+        "progressPercent", "createdAt", "updatedAt"
+      ]
+    },
+    "Booking": {
+      "title": "Booking",
+      "description": "Short-stay property reservation",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "guestUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "listingId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "listingTitle": { "type": "string", "maxLength": 160 },
+        "district": { "type": "string", "maxLength": 80 },
+        "checkIn": { "type": "string", "maxLength": 32 },
+        "checkOut": { "type": "string", "maxLength": 32 },
+        "nights": { "type": "number" },
+        "total": { "type": "number" },
+        "paymentMethod": { "type": "string", "enum": ["Zaad Service", "eDahab", "Cash on Hand", "Card"] },
+        "guestName": { "type": "string", "maxLength": 100 },
+        "guestPhone": { "type": "string", "maxLength": 32 },
+        "status": { "type": "string", "enum": ["held", "confirmed", "cancelled"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id", "guestUid", "listingId", "listingTitle", "district",
+        "checkIn", "checkOut", "nights", "total", "paymentMethod",
+        "guestName", "guestPhone", "status", "createdAt", "updatedAt"
+      ]
+    },
+    "ChatThread": {
+      "title": "ChatThread",
+      "description": "Conversation header between seeker and district broker",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "participantUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "brokerId": { "type": "string", "maxLength": 128 },
+        "brokerName": { "type": "string", "maxLength": 120 },
+        "brokerAvatar": { "type": "string", "maxLength": 500 },
+        "listingId": { "type": "string", "maxLength": 128 },
+        "listingTitle": { "type": "string", "maxLength": 160 },
+        "listingPrice": { "type": "number" },
+        "lastMessage": { "type": "string", "maxLength": 500 },
+        "lastTime": { "type": "string", "maxLength": 40 },
+        "unread": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "participantUid", "brokerId", "brokerName", "lastMessage", "lastTime", "unread", "createdAt", "updatedAt"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "Individual message in a chat thread subcollection",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "threadParticipantUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "senderUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "sender": { "type": "string", "enum": ["user", "broker", "system"] },
+        "body": { "type": "string", "minLength": 1, "maxLength": 1500 },
+        "time": { "type": "string", "maxLength": 32 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "threadParticipantUid", "senderUid", "sender", "body", "time", "createdAt"]
+    },
+    "SearchRequest": {
+      "title": "SearchRequest",
+      "description": "Customer property search request posted via Services",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "ownerUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "seekerName": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "seekerPhone": { "type": "string", "minLength": 4, "maxLength": 32 },
+        "purpose": { "type": "string", "enum": ["rent", "sale", "booking"] },
+        "propertyType": { "type": "string", "enum": ["villa", "apartment", "land", "commercial", "building"] },
+        "district": { "type": "string", "maxLength": 80 },
+        "budgetMin": { "type": "number" },
+        "budgetMax": { "type": "number" },
+        "bedrooms": { "type": "number" },
+        "notes": { "type": "string", "maxLength": 1000 },
+        "status": { "type": "string", "enum": ["open", "matched", "closed"] },
+        "responsesCount": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id", "ownerUid", "seekerName", "seekerPhone", "purpose", "propertyType",
+        "district", "budgetMin", "budgetMax", "bedrooms", "notes", "status",
+        "responsesCount", "createdAt", "updatedAt"
+      ]
+    },
+    "LeaseContract": {
+      "title": "LeaseContract",
+      "description": "Digital Somaliland rental lease contract",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "ownerUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "listingId": { "type": "string", "maxLength": 128 },
+        "propertyTitle": { "type": "string", "maxLength": 160 },
+        "district": { "type": "string", "maxLength": 80 },
+        "landlordName": { "type": "string", "maxLength": 100 },
+        "landlordPhone": { "type": "string", "maxLength": 32 },
+        "tenantName": { "type": "string", "maxLength": 100 },
+        "tenantPhone": { "type": "string", "maxLength": 32 },
+        "tenantIdNumber": { "type": "string", "maxLength": 60 },
+        "monthlyRent": { "type": "number" },
+        "securityDeposit": { "type": "number" },
+        "startDate": { "type": "string", "maxLength": 32 },
+        "durationMonths": { "type": "number" },
+        "terms": { "type": "array" },
+        "landlordSigned": { "type": "boolean" },
+        "tenantSigned": { "type": "boolean" },
+        "status": { "type": "string", "enum": ["draft", "signed", "active"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id", "ownerUid", "listingId", "propertyTitle", "district",
+        "landlordName", "landlordPhone", "tenantName", "tenantPhone",
+        "tenantIdNumber", "monthlyRent", "securityDeposit", "startDate",
+        "durationMonths", "terms", "landlordSigned", "tenantSigned",
+        "status", "createdAt", "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserPublic" },
+      "description": "Publicly readable non-PII user profile"
+    },
+    "/users/{userId}/private/{docId}": {
+      "schema": { "$ref": "#/entities/UserPrivate" },
+      "description": "Owner/admin only PII profile (email, phone, KYC)"
+    },
+    "/users/{userId}/favorites/{listingId}": {
+      "schema": { "$ref": "#/entities/Favorite" },
+      "description": "User saved property bookmarks"
+    },
+    "/admins/{adminId}": {
+      "schema": { "$ref": "#/entities/AdminRecord" },
+      "description": "Verified platform administrator registry"
+    },
+    "/listings/{listingId}": {
+      "schema": { "$ref": "#/entities/Listing" },
+      "description": "Marketplace properties across Hargeisa and Somaliland"
+    },
+    "/projects/{projectId}": {
+      "schema": { "$ref": "#/entities/Project" },
+      "description": "Real estate developer projects"
+    },
+    "/bookings/{bookingId}": {
+      "schema": { "$ref": "#/entities/Booking" },
+      "description": "Short-stay property reservations"
+    },
+    "/chatThreads/{threadId}": {
+      "schema": { "$ref": "#/entities/ChatThread" },
+      "description": "Broker-customer conversation threads"
+    },
+    "/chatThreads/{threadId}/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/ChatMessage" },
+      "description": "Messages inside a chat thread gated by parent participantUid"
+    },
+    "/searchRequests/{requestId}": {
+      "schema": { "$ref": "#/entities/SearchRequest" },
+      "description": "Property seeker requests"
+    },
+    "/leaseContracts/{contractId}": {
+      "schema": { "$ref": "#/entities/LeaseContract" },
+      "description": "Digital lease agreements"
+    }
+  }
+}

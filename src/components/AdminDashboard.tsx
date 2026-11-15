@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { User as FirebaseUser } from 'firebase/auth';
 import { 
   Users, 
   Building2, 
@@ -7,21 +8,21 @@ import {
   CheckCircle2, 
   XCircle, 
   ShieldCheck, 
-  Search, 
-  AlertCircle,
-  FileText,
   TrendingUp,
   Clock,
-  Layers,
-  ArrowUpRight
+  Database
 } from 'lucide-react';
-import { Listing, BrokerInfo } from '../types';
+import { Listing } from '../types';
+import { isVerifiedAdmin, signInWithGoogleVerified } from '../lib/firestoreRepo';
 
 interface AdminDashboardProps {
   listings: Listing[];
   onApproveListing: (id: string) => void;
   onRejectListing: (id: string, reason: string) => void;
   onViewListingDetail: (listing: Listing) => void;
+  firebaseUser?: FirebaseUser | null;
+  hasCloudListings?: boolean;
+  onSeedDatabase?: () => Promise<void>;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
@@ -29,13 +30,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onApproveListing,
   onRejectListing,
   onViewListingDetail,
+  firebaseUser,
+  hasCloudListings,
+  onSeedDatabase,
 }) => {
   const [activeAdminTab, setActiveAdminTab] = useState<'approvals' | 'all_listings' | 'brokers' | 'financials'>('approvals');
   const [rejectId, setRejectId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('Dukumenti lahaansho oo aan caddayn');
+  const [seeding, setSeeding] = useState(false);
 
   const pendingListings = listings.filter((l) => l.status === 'pending');
   const liveListings = listings.filter((l) => l.status === 'live');
+  const adminAuthenticated = isVerifiedAdmin(firebaseUser || null);
 
   const handleConfirmReject = (e: React.FormEvent) => {
     e.preventDefault();
@@ -61,11 +67,40 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-bold px-3 py-1 bg-emerald-100 text-[#0B7A3E] rounded-xl flex items-center gap-1.5">
-            <ShieldCheck className="w-4 h-4" />
-            Super Admin Active
-          </span>
+        <div className="flex flex-wrap items-center gap-2">
+          {adminAuthenticated ? (
+            <>
+              <span className="text-xs font-bold px-3 py-1.5 bg-emerald-100 text-[#0B7A3E] rounded-xl flex items-center gap-1.5">
+                <ShieldCheck className="w-4 h-4" />
+                Firestore Admin ({firebaseUser?.email})
+              </span>
+              {!hasCloudListings && onSeedDatabase && (
+                <button
+                  onClick={async () => {
+                    setSeeding(true);
+                    try {
+                      await onSeedDatabase();
+                    } finally {
+                      setSeeding(false);
+                    }
+                  }}
+                  disabled={seeding}
+                  className="text-xs font-bold px-3 py-1.5 bg-[#0B7A3E] text-white rounded-xl flex items-center gap-1.5 hover:bg-[#0F3D2A]"
+                >
+                  <Database className="w-3.5 h-3.5" />
+                  <span>{seeding ? 'Waa la kaydinayaa...' : 'Ku Shub Xogta Firestore'}</span>
+                </button>
+              )}
+            </>
+          ) : (
+            <button
+              onClick={() => signInWithGoogleVerified()}
+              className="text-xs font-bold px-3 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-xl flex items-center gap-1.5 transition-colors"
+            >
+              <ShieldCheck className="w-4 h-4" />
+              <span>Ku Gal Google Admin (Firestore Sync)</span>
+            </button>
+          )}
         </div>
       </div>
 

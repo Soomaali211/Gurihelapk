@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { User as FirebaseUser } from 'firebase/auth';
+import { Capacitor } from '@capacitor/core';
 import { 
   MapPin, 
   Building2, 
@@ -48,6 +50,9 @@ interface MobileAppShellProps {
   advancedFilters: FilterState;
   onUpdateAdvancedFilters: (filters: FilterState) => void;
   onResetAdvancedFilters: () => void;
+  firebaseUser?: FirebaseUser | null;
+  favorites: string[];
+  onToggleFavorite: (id: string) => void;
 }
 
 export const MobileAppShell: React.FC<MobileAppShellProps> = ({
@@ -70,22 +75,23 @@ export const MobileAppShell: React.FC<MobileAppShellProps> = ({
   advancedFilters,
   onUpdateAdvancedFilters,
   onResetAdvancedFilters,
+  firebaseUser,
+  favorites,
+  onToggleFavorite,
 }) => {
+  const isNativeApk = Capacitor.isNativePlatform();
   const [activeTab, setActiveTab] = useState<'listings' | 'projects' | 'bookings' | 'chat' | 'services' | 'profile'>('listings');
   const [listingsSubView, setListingsSubView] = useState<'map' | 'list'>('map');
   const [selectedListing, setSelectedListing] = useState<Listing | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [activeChatThreadId, setActiveChatThreadId] = useState<string>(chatThreads[0]?.id || '');
-  const [favorites, setFavorites] = useState<string[]>(['A1042', 'wf-65k']);
   const [showSupportModal, setShowSupportModal] = useState(false);
-  const [useDeviceFrame, setUseDeviceFrame] = useState(true);
+  const [useDeviceFrame, setUseDeviceFrame] = useState(!isNativeApk);
 
   const toggleFavorite = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    setFavorites((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
-    );
+    onToggleFavorite(id);
   };
 
   const handleOpenChatWithBroker = (listing: Listing) => {
@@ -102,8 +108,9 @@ export const MobileAppShell: React.FC<MobileAppShellProps> = ({
   const myListings = listings.filter((l) => l.broker.id === 'b-01');
 
   return (
-    <div className="py-4 px-2 sm:px-4 bg-[#EEF2F0] min-h-[calc(100vh-4.5rem)] flex flex-col items-center justify-start">
-      {/* Top Device Frame Toggle Bar */}
+    <div className={isNativeApk ? 'bg-white min-h-screen flex flex-col' : 'py-4 px-2 sm:px-4 bg-[#EEF2F0] min-h-[calc(100vh-4.5rem)] flex flex-col items-center justify-start'}>
+      {/* Top Device Frame Toggle Bar (Browser preview only) */}
+      {!isNativeApk && (
       <div className="w-full max-w-md sm:max-w-xl flex items-center justify-between pb-3 px-2">
         <div className="flex items-center gap-1.5 text-xs font-bold text-[#0F3D2A]">
           <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
@@ -125,13 +132,16 @@ export const MobileAppShell: React.FC<MobileAppShellProps> = ({
               <span>APK Phone Chassis</span>
             </>
           )}
-        </button>
-      </div>
+            </button>
+          </div>
+        )}
 
       {/* APK Mobile Phone Chassis Frame */}
       <div
         className={`w-full transition-all duration-300 relative ${
-          useDeviceFrame
+          isNativeApk
+            ? 'bg-white overflow-hidden'
+            : useDeviceFrame
             ? 'max-w-[410px] rounded-[40px] border-[8px] border-slate-900 shadow-2xl bg-white overflow-hidden ring-2 ring-slate-800/20'
             : 'max-w-5xl rounded-3xl border border-[#C9D2CD] shadow-lg bg-white overflow-hidden'
         }`}
@@ -246,6 +256,7 @@ export const MobileAppShell: React.FC<MobileAppShellProps> = ({
                 myListings={myListings}
                 onOpenAddModal={() => setShowAddModal(true)}
                 onBack={() => setActiveTab('listings')}
+                firebaseUser={firebaseUser}
               />
             </div>
           )}
