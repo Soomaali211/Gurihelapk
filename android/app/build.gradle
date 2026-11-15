@@ -4,11 +4,13 @@ android {
     namespace = "so.gurihel.app"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
+        def envVerCode = System.getenv("ANDROID_VERSION_CODE")
+        def envVerName = System.getenv("ANDROID_VERSION_NAME")
         applicationId "so.gurihel.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode (System.getenv("ANDROID_VERSION_CODE")?.toInteger() ?: 401)
-        versionName (System.getenv("ANDROID_VERSION_NAME") ?: "4.0.3")
+        versionCode (envVerCode != null && envVerCode.trim().isInteger() ? envVerCode.trim().toInteger() : 401)
+        versionName (envVerName != null && !envVerName.trim().isEmpty() ? envVerName.trim() : "4.0.3")
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -18,10 +20,14 @@ android {
     }
     signingConfigs {
         release {
-            storeFile file(System.getenv("ANDROID_KEYSTORE_PATH") ?: "gurihel-signing.p12")
-            storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD") ?: "gurihel2026"
-            keyAlias System.getenv("ANDROID_KEY_ALIAS") ?: "gurihel"
-            keyPassword System.getenv("ANDROID_KEY_PASSWORD") ?: "gurihel2026"
+            def ksPath = System.getenv("ANDROID_KEYSTORE_PATH")
+            def ksStorePass = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+            def ksAlias = System.getenv("ANDROID_KEY_ALIAS")
+            def ksKeyPass = System.getenv("ANDROID_KEY_PASSWORD")
+            storeFile file(ksPath != null && !ksPath.trim().isEmpty() ? ksPath.trim() : "gurihel-signing.p12")
+            storePassword (ksStorePass != null && !ksStorePass.trim().isEmpty() ? ksStorePass.trim() : "gurihel2026")
+            keyAlias (ksAlias != null && !ksAlias.trim().isEmpty() ? ksAlias.trim() : "gurihel")
+            keyPassword (ksKeyPass != null && !ksKeyPass.trim().isEmpty() ? ksKeyPass.trim() : "gurihel2026")
         }
     }
     buildTypes {

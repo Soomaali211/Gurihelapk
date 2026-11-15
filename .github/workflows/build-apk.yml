@@ -12,23 +12,31 @@ permissions:
 
 jobs:
   build-android-apk:
-    name: Build Signed GuriHel APK
+    name: Build Signed GuriHel Release APK
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node.js 22
         uses: actions/setup-node@v4
         with:
           node-version: '22'
 
-      - name: Setup Java JDK 21
+      - name: Setup Java JDK 21 (Temurin)
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '21'
+
+      - name: Setup Android SDK (v4 - Android 36)
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools build-tools;36.0.0 platforms;android-36'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
 
       - name: Compute App Version & Signing Config
         id: ver
@@ -60,10 +68,7 @@ jobs:
           echo "ANDROID_KEY_ALIAS=${SECRET_ALIAS:-gurihel}" >> "$GITHUB_ENV"
           echo "ANDROID_KEY_PASSWORD=${SECRET_KEY_PASS:-gurihel2026}" >> "$GITHUB_ENV"
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install dependencies
+      - name: Install NPM dependencies
         run: npm install --legacy-peer-deps
 
       - name: Build web bundle (Vite)
@@ -71,7 +76,7 @@ jobs:
           VITE_API_BASE_URL: https://ais-pre-fkdyozsv76cejphilj3vft-357698603471.europe-west2.run.app
         run: npm run build
 
-      - name: Sync Capacitor Android assets
+      - name: Sync Capacitor Android project
         run: |
           if [ ! -d "android" ]; then
             npx cap add android
@@ -82,35 +87,40 @@ jobs:
         working-directory: android
         run: |
           chmod +x ./gradlew
-          ./gradlew assembleRelease
+          ./gradlew assembleRelease --no-daemon
 
-      - name: Verify APK Signature & Version
+      - name: Verify Signed Release APK
         run: |
           APK_PATH="android/app/build/outputs/apk/release/app-release.apk"
-          test -f "$APK_PATH"
+          if [ ! -f "$APK_PATH" ]; then
+            echo "Error: Signed Release APK not found at $APK_PATH"
+            exit 1
+          fi
           APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name "apksigner" | sort -V | tail -n 1)
           if [ -n "$APKSIGNER" ]; then
             "$APKSIGNER" verify --print-certs "$APK_PATH"
           fi
           mkdir -p release-apk
           cp "$APK_PATH" release-apk/GuriHel-android.apk
+          ls -lh release-apk/GuriHel-android.apk
 
-      - name: Upload APK Artifact
+      - name: Upload APK to GitHub Actions Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: GuriHel-android-apk
           path: release-apk/GuriHel-android.apk
           retention-days: 90
 
-      - name: Publish APK to GitHub Releases
+      - name: Publish Latest Release with GuriHel-android.apk
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.ver.outputs.version_name }}
           name: GuriHel Android APK (v${{ steps.ver.outputs.version_name }})
+          make_latest: true
           body: |
-            GuriHel Android APK (v${{ steps.ver.outputs.version_name }} / Build ${{ steps.ver.outputs.version_code }}) oo diyaar u ah in si toos ah loo install-gareeyo ama loogu update-gareeyo kii hore.
-            - **In-Place Update Safe:** Wuxuu leeyahay saxiix (keystore) joogto ah iyo versionCode kordhaya si xogtii hore aanay u lumin.
-            - Soo dejiso **`GuriHel-android.apk`** kadibna ku dhufo **Install / Update**.
+            GuriHel Android APK (v${{ steps.ver.outputs.version_name }} / Build ${{ steps.ver.outputs.version_code }}) oo diyaar u ah in si toos ah loo soo dejisto laguna rakibo telefoonka Android.
+            - **Signed Release APK (`so.gurihel.app`):** Si toos ah ayuu u shaqaynayaa, waxaana lagu dul rakibi karaa noocii hore iyada oo aan xogtu lumin.
+            - Hoosta **Assets** ka soo dejiso faylka **`GuriHel-android.apk`** (waa `.apk` dhab ah, ma aha ZIP).
           files: release-apk/GuriHel-android.apk
           draft: false
           prerelease: false
