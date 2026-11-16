@@ -74,10 +74,64 @@ service cloud.firestore {
     }
 
     function isValidAdminRecord(data, adminId) {
-      return data.keys().hasAll(['uid', 'email', 'createdAt'])
-        && data.keys().hasOnly(['uid', 'email', 'createdAt'])
+      return data.keys().hasAll(['uid', 'email', 'subRole', 'status', 'mfaEnabled', 'sessionEpoch', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'email', 'subRole', 'status', 'mfaEnabled', 'totpSecretEnc', 'recoveryCodeHashes', 'sessionEpoch', 'createdAt', 'updatedAt'])
         && data.uid == adminId
         && data.email is string && data.email.size() >= 3 && data.email.size() <= 160
+        && data.subRole in ['super', 'moderator', 'finance', 'support']
+        && data.status in ['active', 'suspended']
+        && data.mfaEnabled is bool
+        && (!('totpSecretEnc' in data) || (data.totpSecretEnc is string && data.totpSecretEnc.size() <= 500))
+        && (!('recoveryCodeHashes' in data) || (
+          data.recoveryCodeHashes is list
+          && data.recoveryCodeHashes.size() <= 10
+          && (data.recoveryCodeHashes.size() == 0 || (data.recoveryCodeHashes[0] is string && data.recoveryCodeHashes[0].size() <= 128))
+        ))
+        && data.sessionEpoch is number && data.sessionEpoch >= 1
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAdminDevice(data, deviceId) {
+      return data.keys().hasAll(['id', 'adminUid', 'fingerprint', 'label', 'trusted', 'approvedBy', 'lastSeenAt', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'adminUid', 'fingerprint', 'label', 'trusted', 'approvedBy', 'lastSeenAt', 'createdAt', 'updatedAt'])
+        && data.id == deviceId
+        && isValidId(data.adminUid)
+        && data.fingerprint is string && data.fingerprint.size() >= 4 && data.fingerprint.size() <= 160
+        && data.label is string && data.label.size() >= 1 && data.label.size() <= 120
+        && data.trusted is bool
+        && data.approvedBy is string && data.approvedBy.size() <= 160
+        && data.lastSeenAt is string && data.lastSeenAt.size() <= 40
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAdminInvitation(data, inviteId) {
+      return data.keys().hasAll(['id', 'email', 'subRole', 'tokenHash', 'status', 'invitedByUid', 'expiresAt', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'email', 'subRole', 'tokenHash', 'status', 'invitedByUid', 'expiresAt', 'createdAt', 'updatedAt'])
+        && data.id == inviteId
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 160
+        && data.subRole in ['super', 'moderator', 'finance', 'support']
+        && data.tokenHash is string && data.tokenHash.size() >= 16 && data.tokenHash.size() <= 128
+        && data.status in ['pending', 'used', 'revoked']
+        && isValidId(data.invitedByUid)
+        && data.expiresAt is string && data.expiresAt.size() <= 40
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAuditLog(data, logId) {
+      return data.keys().hasAll(['id', 'actorUid', 'actorEmail', 'subRole', 'action', 'target', 'details', 'deviceLabel', 'stepUpUsed', 'createdAt'])
+        && data.keys().hasOnly(['id', 'actorUid', 'actorEmail', 'subRole', 'action', 'target', 'details', 'deviceLabel', 'stepUpUsed', 'createdAt'])
+        && data.id == logId
+        && isValidId(data.actorUid)
+        && data.actorEmail is string && data.actorEmail.size() <= 160
+        && data.subRole in ['super', 'moderator', 'finance', 'support']
+        && data.action is string && data.action.size() >= 2 && data.action.size() <= 100
+        && data.target is string && data.target.size() >= 1 && data.target.size() <= 160
+        && data.details is string && data.details.size() <= 500
+        && data.deviceLabel is string && data.deviceLabel.size() <= 120
+        && data.stepUpUsed is bool
         && data.createdAt is timestamp;
     }
 
@@ -306,12 +360,82 @@ service cloud.firestore {
     // Collection Rules
     // ---------------------------------------------------------
 
-    // 1. Admins registry
+    // 1. Admins registry (Super Admin + 2FA state + Session Epoch)
     match /admins/{adminId} {
       allow get: if isValidId(adminId) && (isOwner(adminId) || isAdmin());
       allow list: if isEmailAdmin();
-      allow create: if isValidId(adminId) && isEmailAdmin() && isValidAdminRecord(incoming(), adminId) && incoming().createdAt == request.time;
-      allow update, delete: if isValidId(adminId) && isEmailAdmin();
+      allow create: if isValidId(adminId)
+        && isEmailAdmin()
+        && isValidAdminRecord(incoming(), adminId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(adminId)
+        && isEmailAdmin()
+        && isValidAdminRecord(incoming(), adminId)
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'subRole', 'status', 'mfaEnabled', 'totpSecretEnc',
+          'recoveryCodeHashes', 'sessionEpoch', 'updatedAt'
+        ]);
+      allow delete: if isValidId(adminId) && isEmailAdmin() && adminId != request.auth.uid;
+    }
+
+    // 1b. Trusted Admin Devices (Device Binding)
+    match /admin_devices/{deviceId} {
+      allow get: if isValidId(deviceId) && isAdmin();
+      allow list: if isEmailAdmin();
+      allow create: if isValidId(deviceId)
+        && isEmailAdmin()
+        && isValidAdminDevice(incoming(), deviceId)
+        && incoming().adminUid == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(deviceId)
+        && isEmailAdmin()
+        && isValidAdminDevice(incoming(), deviceId)
+        && incoming().id == existing().id
+        && incoming().adminUid == existing().adminUid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'trusted', 'label', 'lastSeenAt', 'updatedAt'
+        ]);
+      allow delete: if isValidId(deviceId) && isEmailAdmin();
+    }
+
+    // 1c. Admin Invitations (Prepared for future sub-admin rollout)
+    match /admin_invitations/{inviteId} {
+      allow get: if isValidId(inviteId) && isEmailAdmin();
+      allow list: if isEmailAdmin();
+      allow create: if isValidId(inviteId)
+        && isEmailAdmin()
+        && isValidAdminInvitation(incoming(), inviteId)
+        && incoming().invitedByUid == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(inviteId)
+        && isEmailAdmin()
+        && isValidAdminInvitation(incoming(), inviteId)
+        && incoming().id == existing().id
+        && incoming().invitedByUid == existing().invitedByUid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']);
+      allow delete: if isValidId(inviteId) && isEmailAdmin();
+    }
+
+    // 1d. Immutable Audit Logs (Append-only)
+    match /audit_logs/{logId} {
+      allow get: if isValidId(logId) && isAdmin();
+      allow list: if isEmailAdmin();
+      allow create: if isValidId(logId)
+        && isEmailAdmin()
+        && isValidAuditLog(incoming(), logId)
+        && incoming().actorUid == request.auth.uid
+        && incoming().createdAt == request.time;
+      allow update, delete: if false;
     }
 
     // 2. Users (PII-isolated)

@@ -2,6 +2,52 @@ export type ListingPurpose = 'rent' | 'sale' | 'booking';
 export type PropertyType = 'villa' | 'apartment' | 'land' | 'commercial' | 'building';
 export type ListingStatus = 'live' | 'pending' | 'rejected' | 'sold';
 export type UserRole = 'seeker' | 'owner' | 'broker' | 'developer' | 'admin';
+export type AdminSubRole = 'super' | 'moderator' | 'finance' | 'support';
+
+export interface AdminRecord {
+  uid: string;
+  email: string;
+  subRole: AdminSubRole;
+  status: 'active' | 'suspended';
+  mfaEnabled: boolean;
+  totpSecretEnc?: string;
+  recoveryCodeHashes?: string[];
+  sessionEpoch: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminDevice {
+  id: string;
+  adminUid: string;
+  fingerprint: string;
+  label: string;
+  trusted: boolean;
+  approvedBy: string;
+  lastSeenAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AuditLogEntry {
+  id: string;
+  actorUid: string;
+  actorEmail: string;
+  subRole: AdminSubRole;
+  action: string;
+  target: string;
+  details: string;
+  deviceLabel: string;
+  stepUpUsed: boolean;
+  createdAt: string;
+}
+
+export interface AdminSessionState {
+  token: string;
+  expiresAt: number;
+  stepUpUntil: number;
+  sessionEpoch: number;
+}
 
 export interface BrokerInfo {
   id: string;

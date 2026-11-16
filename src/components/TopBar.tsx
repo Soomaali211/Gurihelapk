@@ -113,15 +113,17 @@ export const TopBar: React.FC<TopBarProps> = ({
                 </button>
               </div>
 
-              {/* Role Switcher */}
+              {/* Role Switcher (User + Broker only; Admin is never mixed into user switch role) */}
               <div className="relative group">
                 <button className="flex items-center gap-1 px-2 py-1.5 text-xs bg-[#EEF2F0] hover:bg-slate-200 text-slate-700 rounded-lg transition-colors">
                   <UserCircle className="w-3.5 h-3.5 text-[#0B7A3E]" />
-                  <span className="capitalize font-medium text-[11px] hidden lg:inline">{userRole}</span>
+                  <span className="capitalize font-medium text-[11px] hidden lg:inline">
+                    {userRole === 'admin' ? 'seeker' : userRole}
+                  </span>
                 </button>
                 <div className="absolute right-0 mt-1 w-36 bg-white border border-[#C9D2CD] rounded-xl shadow-lg py-1 hidden group-hover:block z-50">
                   <div className="px-3 py-1 text-[10px] uppercase font-bold text-slate-400">Dooro Doorka</div>
-                  {(['seeker', 'broker', 'admin'] as UserRole[]).map((r) => (
+                  {(['seeker', 'broker'] as UserRole[]).map((r) => (
                     <button
                       key={r}
                       onClick={() => onRoleChange(r)}
@@ -129,7 +131,7 @@ export const TopBar: React.FC<TopBarProps> = ({
                         userRole === r ? 'font-bold text-[#0B7A3E]' : 'text-slate-700'
                       }`}
                     >
-                      <span>{r === 'seeker' ? 'Macaamiil' : r === 'broker' ? 'Dilaal' : 'Maamul (Admin)'}</span>
+                      <span>{r === 'seeker' ? 'Macaamiil' : 'Mulkiile / Dilaal'}</span>
                       {userRole === r && <Check className="w-3 h-3 text-[#0B7A3E]" />}
                     </button>
                   ))}

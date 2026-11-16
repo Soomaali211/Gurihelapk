@@ -1,8 +1,11 @@
 import express, { Request, Response, NextFunction } from 'express';
 import http from 'http';
 import path from 'path';
+import fs from 'fs';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
+import QRCode from 'qrcode';
 import { INITIAL_LISTINGS, INITIAL_PROJECTS, INITIAL_SEARCH_REQUESTS, INITIAL_LEASE_CONTRACTS, DISTRICT_PRICE_TRENDS } from './src/data/mockData';
 
 dotenv.config();
@@ -207,6 +210,485 @@ app.get('/api/health', (_req: Request, res: Response) => {
       cache: 'Redis 7',
     },
     timestamp: new Date().toISOString(),
+  });
+});
+
+// ============================================================================
+// SUPER ADMIN SECURITY ENGINE (Doorashada A: Google Auth + 2FA TOTP + Step-Up)
+// ============================================================================
+const SUPER_ADMIN_EMAIL = 'ccasafari40@gmail.com';
+const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+
+let cachedFirebaseCfg: { apiKey?: string; firestoreDatabaseId?: string } | null = null;
+function getFirebaseRuntimeConfig() {
+  if (cachedFirebaseCfg) return cachedFirebaseCfg;
+  try {
+    const raw = fs.readFileSync(path.resolve(__dirname, 'firebase-applet-config.json'), 'utf8');
+    cachedFirebaseCfg = JSON.parse(raw);
+  } catch {
+    cachedFirebaseCfg = {};
+  }
+  return cachedFirebaseCfg!;
+}
+
+function getServerMasterKey(): Buffer {
+  const cfg = getFirebaseRuntimeConfig();
+  const seed =
+    process.env.ADMIN_SESSION_SECRET ||
+    `${cfg.apiKey || 'gurihel'}:${cfg.firestoreDatabaseId || 'default'}:superadmin-v1`;
+  return crypto.createHash('sha256').update(seed).digest();
+}
+
+function base32Encode(buf: Buffer): string {
+  let bits = 0;
+  let value = 0;
+  let output = '';
+  for (let i = 0; i < buf.length; i++) {
+    value = (value << 8) | buf[i];
+    bits += 8;
+    while (bits >= 5) {
+      output += BASE32_ALPHABET[(value >>> (bits - 5)) & 31];
+      bits -= 5;
+    }
+  }
+  if (bits > 0) {
+    output += BASE32_ALPHABET[(value << (5 - bits)) & 31];
+  }
+  return output;
+}
+
+function base32Decode(str: string): Buffer {
+  const clean = str.toUpperCase().replace(/[^A-Z2-7]/g, '');
+  let bits = 0;
+  let value = 0;
+  const bytes: number[] = [];
+  for (let i = 0; i < clean.length; i++) {
+    const idx = BASE32_ALPHABET.indexOf(clean[i]);
+    if (idx === -1) continue;
+    value = (value << 5) | idx;
+    bits += 5;
+    if (bits >= 8) {
+      bytes.push((value >>> (bits - 8)) & 255);
+      bits -= 8;
+    }
+  }
+  return Buffer.from(bytes);
+}
+
+function generateTotpCode(secretBase32: string, stepOffset = 0): string {
+  const key = base32Decode(secretBase32);
+  const counter = Math.floor(Date.now() / 1000 / 30) + stepOffset;
+  const msg = Buffer.alloc(8);
+  msg.writeBigUInt64BE(BigInt(counter), 0);
+  const hmac = crypto.createHmac('sha1', key).update(msg).digest();
+  const offset = hmac[hmac.length - 1] & 0x0f;
+  const binary =
+    ((hmac[offset] & 0x7f) << 24) |
+    ((hmac[offset + 1] & 0xff) << 16) |
+    ((hmac[offset + 2] & 0xff) << 8) |
+    (hmac[offset + 3] & 0xff);
+  return String(binary % 1_000_000).padStart(6, '0');
+}
+
+function verifyTotpCode(secretBase32: string, code: string): boolean {
+  const normalized = code.replace(/\s+/g, '').trim();
+  if (!/^\d{6}$/.test(normalized)) return false;
+  for (const offset of [-1, 0, 1]) {
+    const candidate = generateTotpCode(secretBase32, offset);
+    if (
+      crypto.timingSafeEqual(Buffer.from(candidate), Buffer.from(normalized))
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function encryptSecret(plainText: string): string {
+  const key = getServerMasterKey();
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  const encrypted = Buffer.concat([cipher.update(plainText, 'utf8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return `${iv.toString('hex')}.${tag.toString('hex')}.${encrypted.toString('hex')}`;
+}
+
+function decryptSecret(payload: string): string | null {
+  try {
+    const parts = payload.split('.');
+    if (parts.length !== 3) return null;
+    const [ivHex, tagHex, dataHex] = parts;
+    const key = getServerMasterKey();
+    const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(ivHex, 'hex'));
+    decipher.setAuthTag(Buffer.from(tagHex, 'hex'));
+    const plain = Buffer.concat([
+      decipher.update(Buffer.from(dataHex, 'hex')),
+      decipher.final(),
+    ]);
+    return plain.toString('utf8');
+  } catch {
+    return null;
+  }
+}
+
+function sha256Hex(val: string): string {
+  return crypto.createHash('sha256').update(val).digest('hex');
+}
+
+function generateRecoveryCodes(): { plain: string[]; hashes: string[] } {
+  const plain: string[] = [];
+  const hashes: string[] = [];
+  for (let i = 0; i < 8; i++) {
+    const partA = crypto.randomBytes(2).toString('hex').toUpperCase();
+    const partB = crypto.randomBytes(2).toString('hex').toUpperCase();
+    const code = `GH-${partA}-${partB}`;
+    plain.push(code);
+    hashes.push(sha256Hex(code));
+  }
+  return { plain, hashes };
+}
+
+interface AdminTokenClaims {
+  uid: string;
+  email: string;
+  subRole: 'super';
+  epoch: number;
+  deviceFp: string;
+  iat: number;
+  exp: number;
+  stepUpUntil: number;
+}
+
+function signAdminSessionToken(claims: AdminTokenClaims): string {
+  const body = Buffer.from(JSON.stringify(claims)).toString('base64url');
+  const sig = crypto.createHmac('sha256', getServerMasterKey()).update(body).digest('base64url');
+  return `${body}.${sig}`;
+}
+
+function verifyAdminSessionToken(token: string): AdminTokenClaims | null {
+  try {
+    const [body, sig] = token.split('.');
+    if (!body || !sig) return null;
+    const expected = crypto.createHmac('sha256', getServerMasterKey()).update(body).digest('base64url');
+    if (
+      sig.length !== expected.length ||
+      !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))
+    ) {
+      return null;
+    }
+    const claims = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')) as AdminTokenClaims;
+    if (!claims || claims.exp < Date.now()) return null;
+    return claims;
+  } catch {
+    return null;
+  }
+}
+
+// Rate limiter: 5 failed 2FA attempts -> 15-minute lockout
+const adminAuthAttempts = new Map<string, { failures: number; lockedUntil: number }>();
+
+function checkAdminRateLimit(key: string): { allowed: boolean; retryAfterSeconds: number } {
+  const entry = adminAuthAttempts.get(key);
+  if (!entry) return { allowed: true, retryAfterSeconds: 0 };
+  if (entry.lockedUntil > Date.now()) {
+    return {
+      allowed: false,
+      retryAfterSeconds: Math.ceil((entry.lockedUntil - Date.now()) / 1000),
+    };
+  }
+  if (entry.lockedUntil > 0 && entry.lockedUntil <= Date.now()) {
+    adminAuthAttempts.delete(key);
+  }
+  return { allowed: true, retryAfterSeconds: 0 };
+}
+
+function recordAdminAuthFailure(key: string): { locked: boolean; remainingAttempts: number } {
+  const prev = adminAuthAttempts.get(key) || { failures: 0, lockedUntil: 0 };
+  const failures = prev.failures + 1;
+  if (failures >= 5) {
+    adminAuthAttempts.set(key, {
+      failures,
+      lockedUntil: Date.now() + 15 * 60 * 1000,
+    });
+    return { locked: true, remainingAttempts: 0 };
+  }
+  adminAuthAttempts.set(key, { failures, lockedUntil: 0 });
+  return { locked: false, remainingAttempts: 5 - failures };
+}
+
+function clearAdminAuthFailures(key: string) {
+  adminAuthAttempts.delete(key);
+}
+
+async function verifyFirebaseSuperAdminIdToken(
+  idToken: string
+): Promise<{ uid: string; email: string } | null> {
+  if (!idToken || typeof idToken !== 'string') return null;
+  const cfg = getFirebaseRuntimeConfig();
+  if (!cfg.apiKey) return null;
+
+  try {
+    const resp = await fetch(
+      `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(cfg.apiKey)}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idToken }),
+      }
+    );
+    if (!resp.ok) return null;
+    const data = (await resp.json()) as {
+      users?: Array<{ localId?: string; email?: string; emailVerified?: boolean }>;
+    };
+    const user = data.users?.[0];
+    if (
+      !user ||
+      !user.localId ||
+      !user.email ||
+      !user.emailVerified ||
+      user.email.toLowerCase() !== SUPER_ADMIN_EMAIL.toLowerCase()
+    ) {
+      return null;
+    }
+    return { uid: user.localId, email: user.email };
+  } catch {
+    return null;
+  }
+}
+
+// 1. Setup 2FA QR Code for Seeded Super Admin
+app.post('/api/admin/2fa/setup', async (req: Request, res: Response) => {
+  const { idToken } = req.body as { idToken?: string };
+  const verifiedUser = await verifyFirebaseSuperAdminIdToken(idToken || '');
+  if (!verifiedUser) {
+    res.status(401).json({ error: 'Aqoonsiga Super Admin lama xaqiijin.' });
+    return;
+  }
+
+  const secretBase32 = base32Encode(crypto.randomBytes(20));
+  const issuer = 'GuriHel SuperAdmin';
+  const otpauthUri = `otpauth://totp/${encodeURIComponent(issuer)}:${encodeURIComponent(
+    verifiedUser.email
+  )}?secret=${secretBase32}&issuer=${encodeURIComponent(issuer)}&algorithm=SHA1&digits=6&period=30`;
+
+  const qrDataUrl = await QRCode.toDataURL(otpauthUri, {
+    width: 220,
+    margin: 1,
+    color: { dark: '#0F3D2A', light: '#FFFFFF' },
+  });
+
+  res.json({
+    qrDataUrl,
+    manualKey: secretBase32,
+    encryptedSecret: encryptSecret(secretBase32),
+  });
+});
+
+// 2. Confirm 2FA Setup + Issue 8 Recovery Codes + Initial 15-min Session
+app.post('/api/admin/2fa/confirm-setup', async (req: Request, res: Response) => {
+  const { idToken, encryptedSecret, code, deviceFp, sessionEpoch } = req.body as {
+    idToken?: string;
+    encryptedSecret?: string;
+    code?: string;
+    deviceFp?: string;
+    sessionEpoch?: number;
+  };
+
+  const verifiedUser = await verifyFirebaseSuperAdminIdToken(idToken || '');
+  if (!verifiedUser) {
+    res.status(401).json({ error: 'Xogtu waa khalad ama lama xaqiijin.' });
+    return;
+  }
+
+  const secret = encryptedSecret ? decryptSecret(encryptedSecret) : null;
+  if (!secret || !code || !verifyTotpCode(secret, code)) {
+    res.status(401).json({ error: 'Koodhka 6-da god ee 2FA waa khalad. Hubi saacadda taleefankaaga.' });
+    return;
+  }
+
+  const recovery = generateRecoveryCodes();
+  const now = Date.now();
+  const expiresAt = now + 15 * 60 * 1000;
+  const stepUpUntil = now + 5 * 60 * 1000;
+  const epoch = typeof sessionEpoch === 'number' && sessionEpoch >= 1 ? sessionEpoch : 1;
+
+  const adminSessionToken = signAdminSessionToken({
+    uid: verifiedUser.uid,
+    email: verifiedUser.email,
+    subRole: 'super',
+    epoch,
+    deviceFp: String(deviceFp || 'web-device').slice(0, 120),
+    iat: now,
+    exp: expiresAt,
+    stepUpUntil,
+  });
+
+  res.json({
+    success: true,
+    encryptedSecret,
+    recoveryCodes: recovery.plain,
+    recoveryCodeHashes: recovery.hashes,
+    adminSessionToken,
+    expiresAt,
+    stepUpUntil,
+    sessionEpoch: epoch,
+  });
+});
+
+// 3. Daily 2FA Login Verify (TOTP or Single-Use Recovery Code) + Rate Limit
+app.post('/api/admin/2fa/verify', async (req: Request, res: Response) => {
+  const { idToken, encryptedSecret, code, recoveryCodeHashes, deviceFp, sessionEpoch } = req.body as {
+    idToken?: string;
+    encryptedSecret?: string;
+    code?: string;
+    recoveryCodeHashes?: string[];
+    deviceFp?: string;
+    sessionEpoch?: number;
+  };
+
+  const verifiedUser = await verifyFirebaseSuperAdminIdToken(idToken || '');
+  if (!verifiedUser) {
+    res.status(401).json({ error: 'Xogtu waa khalad.' });
+    return;
+  }
+
+  const rateKey = `${verifiedUser.uid}:${req.ip || 'unknown'}`;
+  const rate = checkAdminRateLimit(rateKey);
+  if (!rate.allowed) {
+    res.status(429).json({
+      error: `Isku dayo badan oo khaldan awgood, fadlan sug ${Math.ceil(
+        rate.retryAfterSeconds / 60
+      )} daqiiqo.`,
+      retryAfterSeconds: rate.retryAfterSeconds,
+    });
+    return;
+  }
+
+  const secret = encryptedSecret ? decryptSecret(encryptedSecret) : null;
+  const rawCode = String(code || '').trim().toUpperCase();
+  let verifiedByRecoveryIndex = -1;
+  let valid = false;
+
+  if (secret && verifyTotpCode(secret, rawCode)) {
+    valid = true;
+  } else if (Array.isArray(recoveryCodeHashes) && rawCode.startsWith('GH-')) {
+    const incomingHash = sha256Hex(rawCode);
+    const idx = recoveryCodeHashes.findIndex((h) => h === incomingHash);
+    if (idx !== -1) {
+      valid = true;
+      verifiedByRecoveryIndex = idx;
+    }
+  }
+
+  if (!valid) {
+    const failInfo = recordAdminAuthFailure(rateKey);
+    res.status(failInfo.locked ? 429 : 401).json({
+      error: failInfo.locked
+        ? '5 isku day oo khaldan: xisaabta waxaa la xidhay 15 daqiiqo.'
+        : `Xogtu waa khalad. Waxaa kuu hadhay ${failInfo.remainingAttempts} isku day.`,
+    });
+    return;
+  }
+
+  clearAdminAuthFailures(rateKey);
+  const now = Date.now();
+  const expiresAt = now + 15 * 60 * 1000;
+  const stepUpUntil = now + 5 * 60 * 1000;
+  const epoch = typeof sessionEpoch === 'number' && sessionEpoch >= 1 ? sessionEpoch : 1;
+
+  const adminSessionToken = signAdminSessionToken({
+    uid: verifiedUser.uid,
+    email: verifiedUser.email,
+    subRole: 'super',
+    epoch,
+    deviceFp: String(deviceFp || 'web-device').slice(0, 120),
+    iat: now,
+    exp: expiresAt,
+    stepUpUntil,
+  });
+
+  res.json({
+    success: true,
+    adminSessionToken,
+    expiresAt,
+    stepUpUntil,
+    usedRecoveryIndex: verifiedByRecoveryIndex,
+  });
+});
+
+// 4. Silent Access Token Refresh (15-min window rotation while active)
+app.post('/api/admin/session/refresh', async (req: Request, res: Response) => {
+  const { idToken, adminSessionToken, sessionEpoch } = req.body as {
+    idToken?: string;
+    adminSessionToken?: string;
+    sessionEpoch?: number;
+  };
+
+  const verifiedUser = await verifyFirebaseSuperAdminIdToken(idToken || '');
+  const claims = adminSessionToken ? verifyAdminSessionToken(adminSessionToken) : null;
+  if (
+    !verifiedUser ||
+    !claims ||
+    claims.uid !== verifiedUser.uid ||
+    (typeof sessionEpoch === 'number' && claims.epoch !== sessionEpoch)
+  ) {
+    res.status(401).json({ error: 'Session-ku wuu dhacay. Fadlan mar kale gal.' });
+    return;
+  }
+
+  const now = Date.now();
+  const expiresAt = now + 15 * 60 * 1000;
+  const nextToken = signAdminSessionToken({
+    ...claims,
+    iat: now,
+    exp: expiresAt,
+  });
+
+  res.json({
+    success: true,
+    adminSessionToken: nextToken,
+    expiresAt,
+    stepUpUntil: claims.stepUpUntil,
+  });
+});
+
+// 5. Step-Up Auth (Re-verify 2FA for high-risk actions -> 5-min window)
+app.post('/api/admin/step-up', async (req: Request, res: Response) => {
+  const { idToken, adminSessionToken, encryptedSecret, code } = req.body as {
+    idToken?: string;
+    adminSessionToken?: string;
+    encryptedSecret?: string;
+    code?: string;
+  };
+
+  const verifiedUser = await verifyFirebaseSuperAdminIdToken(idToken || '');
+  const claims = adminSessionToken ? verifyAdminSessionToken(adminSessionToken) : null;
+  if (!verifiedUser || !claims || claims.uid !== verifiedUser.uid) {
+    res.status(401).json({ error: 'Session-ka Admin ma shaqaynayo.' });
+    return;
+  }
+
+  const secret = encryptedSecret ? decryptSecret(encryptedSecret) : null;
+  if (!secret || !code || !verifyTotpCode(secret, code)) {
+    res.status(401).json({ error: 'Koodhka 2FA ee Step-Up waa khalad.' });
+    return;
+  }
+
+  const now = Date.now();
+  const stepUpUntil = now + 5 * 60 * 1000;
+  const expiresAt = now + 15 * 60 * 1000;
+  const nextToken = signAdminSessionToken({
+    ...claims,
+    iat: now,
+    exp: expiresAt,
+    stepUpUntil,
+  });
+
+  res.json({
+    success: true,
+    adminSessionToken: nextToken,
+    expiresAt,
+    stepUpUntil,
   });
 });
 

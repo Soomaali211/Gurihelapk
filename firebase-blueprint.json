@@ -32,14 +32,73 @@
     },
     "AdminRecord": {
       "title": "AdminRecord",
-      "description": "Trusted admin allowlist entry",
+      "description": "Trusted Super Admin and future sub-role registry with 2FA and session epoch",
       "type": "object",
       "properties": {
         "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
         "email": { "type": "string", "maxLength": 160 },
+        "subRole": { "type": "string", "enum": ["super", "moderator", "finance", "support"] },
+        "status": { "type": "string", "enum": ["active", "suspended"] },
+        "mfaEnabled": { "type": "boolean" },
+        "totpSecretEnc": { "type": "string", "maxLength": 500 },
+        "recoveryCodeHashes": { "type": "array", "description": "Up to 10 SHA-256 recovery code hashes" },
+        "sessionEpoch": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "subRole", "status", "mfaEnabled", "sessionEpoch", "createdAt", "updatedAt"]
+    },
+    "AdminDevice": {
+      "title": "AdminDevice",
+      "description": "Trusted browser/device binding entry for an admin",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "adminUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "fingerprint": { "type": "string", "minLength": 4, "maxLength": 160 },
+        "label": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "trusted": { "type": "boolean" },
+        "approvedBy": { "type": "string", "maxLength": 160 },
+        "lastSeenAt": { "type": "string", "maxLength": 40 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "adminUid", "fingerprint", "label", "trusted", "approvedBy", "lastSeenAt", "createdAt", "updatedAt"]
+    },
+    "AdminInvitation": {
+      "title": "AdminInvitation",
+      "description": "Single-use Super Admin invite record for future admin expansion",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "email": { "type": "string", "minLength": 3, "maxLength": 160 },
+        "subRole": { "type": "string", "enum": ["super", "moderator", "finance", "support"] },
+        "tokenHash": { "type": "string", "minLength": 16, "maxLength": 128 },
+        "status": { "type": "string", "enum": ["pending", "used", "revoked"] },
+        "invitedByUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "expiresAt": { "type": "string", "maxLength": 40 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "email", "subRole", "tokenHash", "status", "invitedByUid", "expiresAt", "createdAt", "updatedAt"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Immutable append-only security and moderation audit log",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "actorUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "actorEmail": { "type": "string", "maxLength": 160 },
+        "subRole": { "type": "string", "enum": ["super", "moderator", "finance", "support"] },
+        "action": { "type": "string", "minLength": 2, "maxLength": 100 },
+        "target": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "details": { "type": "string", "maxLength": 500 },
+        "deviceLabel": { "type": "string", "maxLength": 120 },
+        "stepUpUsed": { "type": "boolean" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["uid", "email", "createdAt"]
+      "required": ["id", "actorUid", "actorEmail", "subRole", "action", "target", "details", "deviceLabel", "stepUpUsed", "createdAt"]
     },
     "Favorite": {
       "title": "Favorite",
@@ -267,7 +326,19 @@
     },
     "/admins/{adminId}": {
       "schema": { "$ref": "#/entities/AdminRecord" },
-      "description": "Verified platform administrator registry"
+      "description": "Verified Super Admin and future sub-role registry"
+    },
+    "/admin_devices/{deviceId}": {
+      "schema": { "$ref": "#/entities/AdminDevice" },
+      "description": "Trusted devices bound to verified admins"
+    },
+    "/admin_invitations/{inviteId}": {
+      "schema": { "$ref": "#/entities/AdminInvitation" },
+      "description": "Single-use invite tokens prepared for future sub-admins"
+    },
+    "/audit_logs/{logId}": {
+      "schema": { "$ref": "#/entities/AuditLog" },
+      "description": "Immutable admin security and action audit trail"
     },
     "/listings/{listingId}": {
       "schema": { "$ref": "#/entities/Listing" },

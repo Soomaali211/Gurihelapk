@@ -71,9 +71,10 @@ jobs:
       - name: Install NPM dependencies
         run: npm install --legacy-peer-deps
 
-      - name: Build web bundle (Vite)
+      - name: Build web bundle (Vite - Mobile APK Only)
         env:
           VITE_API_BASE_URL: https://ais-pre-fkdyozsv76cejphilj3vft-357698603471.europe-west2.run.app
+          VITE_APP_MODE: mobile
         run: npm run build
 
       - name: Sync Capacitor Android project

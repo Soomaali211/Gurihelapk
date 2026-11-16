@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { Suspense, lazy, useState, useEffect, useRef } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { Capacitor } from '@capacitor/core';
 import {
@@ -21,7 +21,6 @@ import {
 } from './data/mockData';
 import { TopBar } from './components/TopBar';
 import { MobileAppShell } from './components/MobileAppShell';
-import { AdminDashboard } from './components/AdminDashboard';
 import { ListingDetailModal } from './components/ListingDetailModal';
 import { TechStackModal } from './components/TechStackModal';
 import { auth } from './lib/firebase';
@@ -57,12 +56,25 @@ function mergeListingsUnique(primary: Listing[], secondary: Listing[]): Listing[
   return out;
 }
 
+const LazyAdminPortal = __ENABLE_ADMIN_WEB__
+  ? lazy(() => import('./components/AdminPortal').then((m) => ({ default: m.AdminPortal })))
+  : null;
+
 export default function App() {
   const isNativeApk = Capacitor.isNativePlatform();
   const bootRef = useRef(loadPersistedState());
   const initialPersisted = bootRef.current.state;
 
-  const [currentView, setCurrentView] = useState<'mobile' | 'admin'>('mobile');
+  const [currentView, setCurrentView] = useState<'mobile' | 'admin'>(() => {
+    if (isNativeApk || !__ENABLE_ADMIN_WEB__) return 'mobile';
+    if (
+      typeof window !== 'undefined' &&
+      (window.location.pathname === '/admin' || window.location.hash === '#/admin')
+    ) {
+      return 'admin';
+    }
+    return 'mobile';
+  });
   const [userRole, setUserRole] = useState<UserRole>(initialPersisted.userRole);
   const [showTechStack, setShowTechStack] = useState(false);
   const [upgradeBanner, setUpgradeBanner] = useState<string | null>(
@@ -408,8 +420,8 @@ export default function App() {
     return true;
   });
 
-  // In native Android APK, always render strict Mobile Layout (never Desktop Mode)
-  const effectiveView = isNativeApk ? 'mobile' : currentView;
+  // In native Android APK or VITE_APP_MODE=mobile builds, always render strict Mobile Layout
+  const effectiveView = isNativeApk || !__ENABLE_ADMIN_WEB__ ? 'mobile' : currentView;
 
   return (
     <div
@@ -499,21 +511,30 @@ export default function App() {
             onClearAiFilter={handleClearAiFilter}
             isSearchingAi={isSearchingAi}
           />
-        ) : (
-          <AdminDashboard
-            listings={listings}
-            onApproveListing={handleApproveListing}
-            onRejectListing={handleRejectListing}
-            onViewListingDetail={(listing) => setInspectListing(listing)}
-            firebaseUser={firebaseUser}
-            hasCloudListings={hasCloudListings}
-            onSeedDatabase={async () => {
-              if (firebaseUser && isVerifiedAdmin(firebaseUser)) {
-                await seedMarketplaceToFirestore(firebaseUser);
-              }
-            }}
-          />
-        )}
+        ) : LazyAdminPortal ? (
+          <Suspense
+            fallback={
+              <div className="flex-1 flex items-center justify-center text-xs font-bold text-[#0F3D2A]">
+                Waa la furayaa Admin Web Portal...
+              </div>
+            }
+          >
+            <LazyAdminPortal
+              listings={listings}
+              onApproveListing={handleApproveListing}
+              onRejectListing={handleRejectListing}
+              onViewListingDetail={(listing) => setInspectListing(listing)}
+              firebaseUser={firebaseUser}
+              hasCloudListings={hasCloudListings}
+              onSeedDatabase={async () => {
+                if (firebaseUser && isVerifiedAdmin(firebaseUser)) {
+                  await seedMarketplaceToFirestore(firebaseUser);
+                }
+              }}
+              onBackToApp={() => setCurrentView('mobile')}
+            />
+          </Suspense>
+        ) : null}
       </div>
 
       {inspectListing && (

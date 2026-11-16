@@ -1,19 +1,40 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { User as FirebaseUser } from 'firebase/auth';
-import { 
-  Users, 
-  Building2, 
-  CalendarCheck, 
-  DollarSign, 
-  CheckCircle2, 
-  XCircle, 
-  ShieldCheck, 
+import {
+  Users,
+  Building2,
+  CalendarCheck,
+  DollarSign,
+  CheckCircle2,
+  XCircle,
+  ShieldCheck,
   TrendingUp,
   Clock,
-  Database
+  Database,
+  Lock,
+  Smartphone,
+  Power,
+  FileText,
+  AlertTriangle,
+  RefreshCw,
 } from 'lucide-react';
-import { Listing } from '../types';
-import { isVerifiedAdmin, signInWithGoogleVerified } from '../lib/firestoreRepo';
+import {
+  AdminDevice,
+  AdminRecord,
+  AdminSessionState,
+  AuditLogEntry,
+  Listing,
+} from '../types';
+import {
+  isVerifiedAdmin,
+  signInWithGoogleVerified,
+  subscribeAdminDevices,
+  subscribeAuditLogs,
+  revokeAdminDevice,
+  triggerSuperAdminKillSwitch,
+  appendAuditLog,
+} from '../lib/firestoreRepo';
+import { refreshAdminSessionToken, verifyStepUp2FA } from '../lib/adminSecurity';
 
 interface AdminDashboardProps {
   listings: Listing[];
@@ -23,6 +44,11 @@ interface AdminDashboardProps {
   firebaseUser?: FirebaseUser | null;
   hasCloudListings?: boolean;
   onSeedDatabase?: () => Promise<void>;
+  adminRecord?: AdminRecord | null;
+  adminSession?: AdminSessionState | null;
+  currentDevice?: AdminDevice | null;
+  onSessionUpdate?: (next: AdminSessionState) => void;
+  onLockSession?: () => void;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
@@ -33,21 +59,165 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   firebaseUser,
   hasCloudListings,
   onSeedDatabase,
+  adminRecord,
+  adminSession,
+  currentDevice,
+  onSessionUpdate,
+  onLockSession,
 }) => {
-  const [activeAdminTab, setActiveAdminTab] = useState<'approvals' | 'all_listings' | 'brokers' | 'financials'>('approvals');
+  const [activeAdminTab, setActiveAdminTab] = useState<
+    'approvals' | 'all_listings' | 'brokers' | 'financials' | 'security'
+  >('approvals');
   const [rejectId, setRejectId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('Dukumenti lahaansho oo aan caddayn');
   const [seeding, setSeeding] = useState(false);
+
+  // Super Admin Live Security State
+  const [devices, setDevices] = useState<AdminDevice[]>([]);
+  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
+  const [securityNotice, setSecurityNotice] = useState<string | null>(null);
+
+  // Step-Up 2FA Gate Modal State
+  const [stepUpAction, setStepUpAction] = useState<{
+    title: string;
+    run: () => Promise<void>;
+  } | null>(null);
+  const [stepUpCode, setStepUpCode] = useState('');
+  const [stepUpError, setStepUpError] = useState<string | null>(null);
+  const [stepUpBusy, setStepUpBusy] = useState(false);
+  const lastActivityRef = useRef<number>(Date.now());
 
   const pendingListings = listings.filter((l) => l.status === 'pending');
   const liveListings = listings.filter((l) => l.status === 'live');
   const adminAuthenticated = isVerifiedAdmin(firebaseUser || null);
 
-  const handleConfirmReject = (e: React.FormEvent) => {
+  // Subscribe to Trusted Devices & Immutable Audit Logs
+  useEffect(() => {
+    if (!firebaseUser || !isVerifiedAdmin(firebaseUser)) return;
+    const unsubDevices = subscribeAdminDevices(firebaseUser, setDevices);
+    const unsubLogs = subscribeAuditLogs(firebaseUser, setAuditLogs);
+    return () => {
+      unsubDevices();
+      unsubLogs();
+    };
+  }, [firebaseUser]);
+
+  // 30-min Inactivity Auto-Lock + Silent 15-min Session Refresh
+  useEffect(() => {
+    if (!firebaseUser || !adminSession || !adminRecord || !onLockSession || !onSessionUpdate) {
+      return;
+    }
+
+    const markActive = () => {
+      lastActivityRef.current = Date.now();
+    };
+    window.addEventListener('pointerdown', markActive);
+    window.addEventListener('keydown', markActive);
+
+    const timer = window.setInterval(async () => {
+      const now = Date.now();
+      // 30 min idle -> force full 2FA re-login
+      if (now - lastActivityRef.current > 30 * 60 * 1000) {
+        onLockSession();
+        return;
+      }
+      // Refresh 15-min token cleanly if < 2 min remaining
+      if (adminSession.expiresAt - now < 2 * 60 * 1000) {
+        try {
+          const idToken = await firebaseUser.getIdToken();
+          const refreshed = await refreshAdminSessionToken({
+            idToken,
+            adminSessionToken: adminSession.token,
+            sessionEpoch: adminRecord.sessionEpoch,
+          });
+          onSessionUpdate(refreshed);
+        } catch {
+          onLockSession();
+        }
+      }
+    }, 30_000);
+
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('pointerdown', markActive);
+      window.removeEventListener('keydown', markActive);
+    };
+  }, [firebaseUser, adminSession, adminRecord, onLockSession, onSessionUpdate]);
+
+  const executeWithStepUp = async (title: string, actionFn: () => Promise<void>) => {
+    const now = Date.now();
+    if (adminSession && adminSession.stepUpUntil > now) {
+      await actionFn();
+      return;
+    }
+    setStepUpCode('');
+    setStepUpError(null);
+    setStepUpAction({ title, run: actionFn });
+  };
+
+  const handleStepUpSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (
+      !firebaseUser ||
+      !adminSession ||
+      !adminRecord?.totpSecretEnc ||
+      !stepUpAction ||
+      !onSessionUpdate
+    ) {
+      return;
+    }
+
+    setStepUpBusy(true);
+    setStepUpError(null);
+    try {
+      const idToken = await firebaseUser.getIdToken();
+      const refreshed = await verifyStepUp2FA({
+        idToken,
+        adminSessionToken: adminSession.token,
+        encryptedSecret: adminRecord.totpSecretEnc,
+        code: stepUpCode.trim(),
+        sessionEpoch: adminRecord.sessionEpoch,
+      });
+      onSessionUpdate(refreshed);
+      const pendingRun = stepUpAction.run;
+      setStepUpAction(null);
+      setStepUpCode('');
+      await pendingRun();
+    } catch (err) {
+      setStepUpError(err instanceof Error ? err.message : 'Koodhka Step-Up waa khalad.');
+    } finally {
+      setStepUpBusy(false);
+    }
+  };
+
+  const handleApproveWithAudit = async (id: string) => {
+    onApproveListing(id);
+    if (firebaseUser && isVerifiedAdmin(firebaseUser)) {
+      await appendAuditLog(firebaseUser, {
+        action: 'listing.approved',
+        target: id,
+        details: `Guriga #${id} waa la ansixiyay loona gudbiyay Live.`,
+        deviceLabel: currentDevice?.label || 'Admin Web',
+        stepUpUsed: Boolean(adminSession && adminSession.stepUpUntil > Date.now()),
+      });
+    }
+  };
+
+  const handleConfirmReject = async (e: React.FormEvent) => {
     e.preventDefault();
     if (rejectId) {
-      onRejectListing(rejectId, rejectReason);
+      const targetId = rejectId;
+      onRejectListing(targetId, rejectReason);
       setRejectId(null);
+      if (firebaseUser && isVerifiedAdmin(firebaseUser)) {
+        await appendAuditLog(firebaseUser, {
+          action: 'listing.rejected',
+          target: targetId,
+          details: `Waa la diiday sababta: ${rejectReason}`,
+          deviceLabel: currentDevice?.label || 'Admin Web',
+          stepUpUsed: Boolean(adminSession && adminSession.stepUpUntil > Date.now()),
+        });
+      }
     }
   };
 
@@ -72,8 +242,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <>
               <span className="text-xs font-bold px-3 py-1.5 bg-emerald-100 text-[#0B7A3E] rounded-xl flex items-center gap-1.5">
                 <ShieldCheck className="w-4 h-4" />
-                Firestore Admin ({firebaseUser?.email})
+                <span>Super Admin · 2FA ✓ ({firebaseUser?.email})</span>
               </span>
+              {currentDevice && (
+                <span className="text-[11px] font-bold px-2.5 py-1.5 bg-slate-100 text-slate-700 rounded-xl flex items-center gap-1.5">
+                  <Smartphone className="w-3.5 h-3.5 text-[#0B7A3E]" />
+                  <span>{currentDevice.label}</span>
+                </span>
+              )}
               {!hasCloudListings && onSeedDatabase && (
                 <button
                   onClick={async () => {
@@ -91,6 +267,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <span>{seeding ? 'Waa la kaydinayaa...' : 'Ku Shub Xogta Firestore'}</span>
                 </button>
               )}
+              {onLockSession && (
+                <button
+                  type="button"
+                  onClick={onLockSession}
+                  className="text-xs font-bold px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl flex items-center gap-1.5"
+                  title="Xidh Session-ka (Lock)"
+                >
+                  <Lock className="w-3.5 h-3.5" />
+                  <span>Xidh Session</span>
+                </button>
+              )}
             </>
           ) : (
             <button
@@ -103,6 +290,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           )}
         </div>
       </div>
+
+      {securityNotice && (
+        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs font-bold text-[#0B7A3E] flex items-center justify-between gap-2">
+          <span>✓ {securityNotice}</span>
+          <button onClick={() => setSecurityNotice(null)} className="px-2">✕</button>
+        </div>
+      )}
 
       {/* KPI Cards Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
@@ -204,13 +398,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
         <button
           onClick={() => setActiveAdminTab('financials')}
-          className={`px-4 py-2 text-xs font-bold rounded-xl transition-all ${
+          className={`px-4 py-2 text-xs font-bold rounded-xl transition-all shrink-0 ${
             activeAdminTab === 'financials'
               ? 'bg-[#0B7A3E] text-white shadow-xs'
               : 'text-slate-600 hover:bg-slate-100'
           }`}
         >
           Lacag-Bixinta & Xisaabaadka
+        </button>
+
+        <button
+          onClick={() => setActiveAdminTab('security')}
+          className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 shrink-0 ${
+            activeAdminTab === 'security'
+              ? 'bg-[#0F3D2A] text-white shadow-xs'
+              : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          <ShieldCheck className="w-4 h-4" />
+          <span>Ammaanka, Devices & Audit Log</span>
         </button>
       </div>
 
@@ -281,7 +487,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <span>Diid (Reject)</span>
                     </button>
                     <button
-                      onClick={() => onApproveListing(listing.id)}
+                      onClick={() => handleApproveWithAudit(listing.id)}
                       className="px-4 py-2 bg-[#0B7A3E] hover:bg-[#0F3D2A] text-xs font-bold text-white rounded-xl shadow-xs transition-colors flex items-center gap-1.5"
                     >
                       <CheckCircle2 className="w-4 h-4" />
@@ -395,9 +601,192 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       )}
 
+      {/* Tab 5: Super Admin Security, Trusted Devices, Kill Switch & Audit Log */}
+      {activeAdminTab === 'security' && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* Trusted Devices Card */}
+            <div className="bg-white rounded-3xl border border-[#C9D2CD] p-5 shadow-xs space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Smartphone className="w-4 h-4 text-[#0B7A3E]" />
+                  <h3 className="text-sm font-bold text-[#0F3D2A]">
+                    Trusted Devices (Device Binding)
+                  </h3>
+                </div>
+                <span className="text-[11px] font-bold text-slate-500">
+                  {devices.filter((d) => d.trusted).length} firfircoon
+                </span>
+              </div>
+
+              {devices.length === 0 ? (
+                <p className="text-xs text-slate-500 py-4 text-center">
+                  Weli qalab diiwaangashan ma jiro.
+                </p>
+              ) : (
+                <div className="space-y-2.5">
+                  {devices.map((dev) => (
+                    <div
+                      key={dev.id}
+                      className="p-3 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between gap-3"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-slate-900 truncate">
+                            {dev.label}
+                          </span>
+                          {currentDevice?.id === dev.id && (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-[#0B7A3E]">
+                              Qalabkan
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-slate-500 font-mono truncate">
+                          FP: {dev.fingerprint} · Last: {new Date(dev.lastSeenAt || dev.updatedAt).toLocaleString()}
+                        </div>
+                      </div>
+
+                      {dev.trusted ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            executeWithStepUp(
+                              `Ka saar qalabka (${dev.label})`,
+                              async () => {
+                                if (!firebaseUser) return;
+                                await revokeAdminDevice(firebaseUser, dev.id);
+                                await appendAuditLog(firebaseUser, {
+                                  action: 'device.revoked',
+                                  target: dev.id,
+                                  details: `Qalabka ${dev.label} waa laga qaaday kalsoonida (Revoked).`,
+                                  deviceLabel: currentDevice?.label || 'Admin Web',
+                                  stepUpUsed: true,
+                                });
+                                setSecurityNotice(`Qalabka ${dev.label} waa la joojiyay.`);
+                              }
+                            )
+                          }
+                          className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 text-[11px] font-bold rounded-xl shrink-0"
+                        >
+                          Revoke
+                        </button>
+                      ) : (
+                        <span className="px-2.5 py-1 bg-slate-200 text-slate-600 text-[10px] font-bold rounded-xl shrink-0">
+                          Revoked
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Emergency Kill Switch & Future Expansion Card */}
+            <div className="space-y-4">
+              <div className="bg-red-50/70 rounded-3xl border border-red-200 p-5 space-y-3">
+                <div className="flex items-center gap-2 text-red-800">
+                  <Power className="w-5 h-5" />
+                  <h3 className="text-sm font-black">Kill Switch (Xaalad Degdeg ah)</h3>
+                </div>
+                <p className="text-xs text-red-900/80 leading-relaxed">
+                  Haddii aad ka shakido in qalab lumay ama session la xaday, riix badhankan si loo xidho dhammaan sessions-ka, loo joojiyo dhammaan trusted devices, loona kordhiyo Session Epoch ({adminRecord?.sessionEpoch || 1}).
+                </p>
+                <button
+                  type="button"
+                  onClick={() =>
+                    executeWithStepUp('Fulinta Kill Switch (Xidh Dhammaan Sessions)', async () => {
+                      if (!firebaseUser || !adminRecord) return;
+                      await triggerSuperAdminKillSwitch(
+                        firebaseUser,
+                        adminRecord.sessionEpoch,
+                        devices,
+                        currentDevice?.label || 'Admin Web'
+                      );
+                      onLockSession?.();
+                    })
+                  }
+                  className="px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl shadow-xs flex items-center gap-2"
+                >
+                  <Power className="w-4 h-4" />
+                  <span>Xidh Dhammaan Sessions (Kill Switch)</span>
+                </button>
+              </div>
+
+              <div className="bg-white rounded-3xl border border-[#C9D2CD] p-5 space-y-2">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-extrabold text-[#0F3D2A]">
+                    Heerka Maamulka Hadda & Mustaqbalka
+                  </h4>
+                  <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-[#0B7A3E] text-[10px] font-bold">
+                    Super Admin Only
+                  </span>
+                </div>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Hadda nidaamku wuxuu u shaqaynayaa <strong>Super Admin keliya</strong> ({firebaseUser?.email}) isagoo leh 2FA TOTP, Device Binding, Step-Up Auth, iyo Audit Log. Qaab-dhismeedka database-ka (`admin_invitations`, `subRole`) wuxuu diyaar u yahay marka mustaqbalka lagu daro Moderator, Finance, iyo Support.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Immutable Audit Log Table */}
+          <div className="bg-white rounded-3xl border border-[#C9D2CD] overflow-hidden shadow-xs">
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <FileText className="w-4 h-4 text-[#0B7A3E]" />
+                <h3 className="text-sm font-bold text-[#0F3D2A]">
+                  Audit Log (Diiwaan Aan La Tirtiri Karin)
+                </h3>
+              </div>
+              <span className="text-[11px] text-slate-500">{auditLogs.length} dhacdo</span>
+            </div>
+
+            {auditLogs.length === 0 ? (
+              <div className="p-6 text-center text-xs text-slate-500">
+                Weli wax dhacdo ah laguma qorin Audit Log-ga.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
+                    <tr>
+                      <th className="p-3">Waqtiga</th>
+                      <th className="p-3">Ficilka (Action)</th>
+                      <th className="p-3">Faahfaahin</th>
+                      <th className="p-3">Qalabka</th>
+                      <th className="p-3">Step-Up</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {auditLogs.map((log) => (
+                      <tr key={log.id} className="hover:bg-slate-50">
+                        <td className="p-3 text-slate-500 whitespace-nowrap tabular-nums">
+                          {new Date(log.createdAt).toLocaleString()}
+                        </td>
+                        <td className="p-3 font-mono font-bold text-[#0F3D2A]">{log.action}</td>
+                        <td className="p-3 text-slate-700 max-w-md">{log.details}</td>
+                        <td className="p-3 text-slate-500 whitespace-nowrap">{log.deviceLabel}</td>
+                        <td className="p-3">
+                          {log.stepUpUsed ? (
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-[#0B7A3E] text-[10px] font-bold">
+                              2FA ✓
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 text-[10px]">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Reject Modal */}
       {rejectId && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[500] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-5 max-w-sm w-full border border-slate-200 shadow-2xl space-y-3">
             <h4 className="text-sm font-bold text-red-600">Sababta loo Diiday Xayeysiiska:</h4>
             <select
@@ -426,6 +815,62 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Step-Up 2FA Modal for High-Risk Super Admin Actions */}
+      {stepUpAction && (
+        <div className="fixed inset-0 z-[520] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <form
+            onSubmit={handleStepUpSubmit}
+            className="bg-white rounded-3xl p-6 max-w-sm w-full border border-slate-200 shadow-2xl space-y-4"
+          >
+            <div className="flex items-center gap-2.5">
+              <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
+                <Lock className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="text-sm font-black text-[#0F3D2A]">Step-Up 2FA Xaqiijin</h4>
+                <p className="text-[11px] text-slate-500">{stepUpAction.title}</p>
+              </div>
+            </div>
+
+            {stepUpError && (
+              <div className="p-2.5 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>{stepUpError}</span>
+              </div>
+            )}
+
+            <input
+              type="text"
+              inputMode="numeric"
+              maxLength={6}
+              value={stepUpCode}
+              onChange={(e) => setStepUpCode(e.target.value.replace(/\D/g, ''))}
+              placeholder="000000"
+              autoFocus
+              className="w-full h-12 text-center tracking-[0.35em] font-mono text-lg font-black bg-slate-50 border border-slate-300 rounded-2xl focus:bg-white focus:border-[#0B7A3E] outline-none"
+            />
+
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setStepUpAction(null)}
+                className="px-3 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl"
+              >
+                Ka noqo
+              </button>
+              <button
+                type="submit"
+                disabled={stepUpBusy || stepUpCode.length !== 6}
+                className="px-4 py-2 bg-[#0B7A3E] hover:bg-[#0F3D2A] text-white text-xs font-bold rounded-xl flex items-center gap-1.5 disabled:opacity-50"
+              >
+                {stepUpBusy && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                <span>Xaqiiji & Fuli</span>
+              </button>
+            </div>
+          </form>
         </div>
       )}
     </div>

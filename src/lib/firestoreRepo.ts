@@ -1,6 +1,7 @@
 import {
   collection,
   doc,
+  getDoc,
   getDocs,
   setDoc,
   updateDoc,
@@ -8,6 +9,8 @@ import {
   onSnapshot,
   query,
   where,
+  orderBy,
+  limit,
   serverTimestamp,
   Timestamp,
   Unsubscribe,
@@ -27,6 +30,9 @@ import {
   SearchRequest,
   LeaseContract,
   UserRole,
+  AdminRecord,
+  AdminDevice,
+  AuditLogEntry,
 } from '../types';
 import { INITIAL_LISTINGS, INITIAL_PROJECTS } from '../data/mockData';
 
@@ -397,4 +403,369 @@ export async function seedMarketplaceToFirestore(adminUser: User): Promise<numbe
   }
 
   return seeded;
+}
+
+// ============================================================================
+// SUPER ADMIN FIRESTORE OPERATIONS (Admins Registry, Devices, Kill Switch, Audit Log)
+// ============================================================================
+
+export async function ensureSuperAdminRecord(user: User): Promise<AdminRecord> {
+  const uid = sanitizeId(user.uid, 'admin');
+  const path = `admins/${uid}`;
+  const ref = doc(db, 'admins', uid);
+
+  try {
+    const snap = await getDoc(ref);
+    if (snap.exists()) {
+      const data = snap.data();
+      // Upgrade legacy record if missing Super Admin security fields
+      if (
+        !data.subRole ||
+        typeof data.mfaEnabled !== 'boolean' ||
+        typeof data.sessionEpoch !== 'number'
+      ) {
+        const patched = {
+          uid,
+          email: (user.email || data.email || ADMIN_EMAIL).slice(0, 160),
+          subRole: 'super' as const,
+          status: 'active' as const,
+          mfaEnabled: Boolean(data.mfaEnabled),
+          sessionEpoch: typeof data.sessionEpoch === 'number' ? data.sessionEpoch : 1,
+          createdAt: data.createdAt || serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        };
+        await setDoc(ref, patched);
+        return {
+          uid,
+          email: patched.email,
+          subRole: 'super',
+          status: 'active',
+          mfaEnabled: patched.mfaEnabled,
+          totpSecretEnc: data.totpSecretEnc,
+          recoveryCodeHashes: data.recoveryCodeHashes,
+          sessionEpoch: patched.sessionEpoch,
+          createdAt: timestampToIso(data.createdAt),
+          updatedAt: new Date().toISOString(),
+        };
+      }
+
+      return {
+        uid,
+        email: String(data.email || user.email || ADMIN_EMAIL),
+        subRole: data.subRole || 'super',
+        status: data.status || 'active',
+        mfaEnabled: Boolean(data.mfaEnabled),
+        totpSecretEnc: data.totpSecretEnc,
+        recoveryCodeHashes: Array.isArray(data.recoveryCodeHashes)
+          ? data.recoveryCodeHashes
+          : [],
+        sessionEpoch: Number(data.sessionEpoch) || 1,
+        createdAt: timestampToIso(data.createdAt),
+        updatedAt: timestampToIso(data.updatedAt),
+      };
+    }
+
+    const freshPayload = {
+      uid,
+      email: (user.email || ADMIN_EMAIL).slice(0, 160),
+      subRole: 'super' as const,
+      status: 'active' as const,
+      mfaEnabled: false,
+      sessionEpoch: 1,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    };
+    await setDoc(ref, freshPayload);
+
+    return {
+      uid,
+      email: freshPayload.email,
+      subRole: 'super',
+      status: 'active',
+      mfaEnabled: false,
+      recoveryCodeHashes: [],
+      sessionEpoch: 1,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+}
+
+export async function saveSuperAdminMfaSetup(
+  user: User,
+  totpSecretEnc: string,
+  recoveryCodeHashes: string[]
+): Promise<void> {
+  const uid = sanitizeId(user.uid, 'admin');
+  const path = `admins/${uid}`;
+  try {
+    await updateDoc(doc(db, 'admins', uid), {
+      mfaEnabled: true,
+      totpSecretEnc: totpSecretEnc.slice(0, 500),
+      recoveryCodeHashes: recoveryCodeHashes.slice(0, 10),
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, path);
+  }
+}
+
+export async function consumeRecoveryCodeHash(
+  user: User,
+  remainingHashes: string[]
+): Promise<void> {
+  const uid = sanitizeId(user.uid, 'admin');
+  const path = `admins/${uid}`;
+  try {
+    await updateDoc(doc(db, 'admins', uid), {
+      recoveryCodeHashes: remainingHashes.slice(0, 10),
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, path);
+  }
+}
+
+export async function getAdminDeviceByFingerprint(
+  user: User,
+  fingerprint: string
+): Promise<AdminDevice | null> {
+  const uid = sanitizeId(user.uid, 'admin');
+  const deviceId = sanitizeId(`dev-${uid.slice(0, 16)}-${fingerprint.slice(0, 32)}`, 'dev');
+  const path = `admin_devices/${deviceId}`;
+  try {
+    const snap = await getDoc(doc(db, 'admin_devices', deviceId));
+    if (!snap.exists()) return null;
+    const d = snap.data();
+    return {
+      id: snap.id,
+      adminUid: String(d.adminUid),
+      fingerprint: String(d.fingerprint),
+      label: String(d.label),
+      trusted: Boolean(d.trusted),
+      approvedBy: String(d.approvedBy || ''),
+      lastSeenAt: String(d.lastSeenAt || ''),
+      createdAt: timestampToIso(d.createdAt),
+      updatedAt: timestampToIso(d.updatedAt),
+    };
+  } catch (error) {
+    handleFirestoreError(error, OperationType.GET, path);
+  }
+}
+
+export async function registerOrTouchTrustedDevice(
+  user: User,
+  fingerprint: string,
+  label: string,
+  trusted = true
+): Promise<AdminDevice> {
+  const uid = sanitizeId(user.uid, 'admin');
+  const deviceId = sanitizeId(`dev-${uid.slice(0, 16)}-${fingerprint.slice(0, 32)}`, 'dev');
+  const path = `admin_devices/${deviceId}`;
+  const nowIso = new Date().toISOString().slice(0, 40);
+
+  try {
+    const ref = doc(db, 'admin_devices', deviceId);
+    const snap = await getDoc(ref);
+    if (snap.exists()) {
+      await updateDoc(ref, {
+        trusted,
+        label: label.slice(0, 120),
+        lastSeenAt: nowIso,
+        updatedAt: serverTimestamp(),
+      });
+      const existing = snap.data();
+      return {
+        id: deviceId,
+        adminUid: uid,
+        fingerprint: String(existing.fingerprint || fingerprint),
+        label: label.slice(0, 120),
+        trusted,
+        approvedBy: String(existing.approvedBy || user.email || ADMIN_EMAIL),
+        lastSeenAt: nowIso,
+        createdAt: timestampToIso(existing.createdAt),
+        updatedAt: nowIso,
+      };
+    }
+
+    const payload = {
+      id: deviceId,
+      adminUid: uid,
+      fingerprint: fingerprint.slice(0, 160),
+      label: label.slice(0, 120),
+      trusted,
+      approvedBy: (user.email || ADMIN_EMAIL).slice(0, 160),
+      lastSeenAt: nowIso,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    };
+    await setDoc(ref, payload);
+    return {
+      id: deviceId,
+      adminUid: uid,
+      fingerprint: payload.fingerprint,
+      label: payload.label,
+      trusted,
+      approvedBy: payload.approvedBy,
+      lastSeenAt: nowIso,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    };
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+}
+
+export function subscribeAdminDevices(
+  user: User,
+  onData: (devices: AdminDevice[]) => void,
+  onError?: (err: Error) => void
+): Unsubscribe {
+  if (!isVerifiedAdmin(user)) return () => {};
+  const path = 'admin_devices';
+  return onSnapshot(
+    collection(db, 'admin_devices'),
+    (snapshot) => {
+      const items: AdminDevice[] = snapshot.docs.map((s) => {
+        const d = s.data();
+        return {
+          id: s.id,
+          adminUid: String(d.adminUid || ''),
+          fingerprint: String(d.fingerprint || ''),
+          label: String(d.label || 'Unknown Device'),
+          trusted: Boolean(d.trusted),
+          approvedBy: String(d.approvedBy || ''),
+          lastSeenAt: String(d.lastSeenAt || ''),
+          createdAt: timestampToIso(d.createdAt),
+          updatedAt: timestampToIso(d.updatedAt),
+        };
+      });
+      onData(items);
+    },
+    (error) => {
+      try {
+        handleFirestoreError(error, OperationType.LIST, path);
+      } catch (wrapped) {
+        if (onError && wrapped instanceof Error) onError(wrapped);
+      }
+    }
+  );
+}
+
+export async function revokeAdminDevice(user: User, deviceId: string): Promise<void> {
+  if (!isVerifiedAdmin(user)) return;
+  const cleanId = sanitizeId(deviceId, 'dev');
+  const path = `admin_devices/${cleanId}`;
+  try {
+    await updateDoc(doc(db, 'admin_devices', cleanId), {
+      trusted: false,
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, path);
+  }
+}
+
+export async function appendAuditLog(
+  user: User,
+  entry: {
+    action: string;
+    target: string;
+    details: string;
+    deviceLabel: string;
+    stepUpUsed: boolean;
+  }
+): Promise<void> {
+  if (!isVerifiedAdmin(user)) return;
+  const uid = sanitizeId(user.uid, 'admin');
+  const logId = sanitizeId(`log-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, 'log');
+  const path = `audit_logs/${logId}`;
+  try {
+    await setDoc(doc(db, 'audit_logs', logId), {
+      id: logId,
+      actorUid: uid,
+      actorEmail: (user.email || ADMIN_EMAIL).slice(0, 160),
+      subRole: 'super',
+      action: entry.action.slice(0, 100),
+      target: entry.target.slice(0, 160),
+      details: entry.details.slice(0, 500),
+      deviceLabel: entry.deviceLabel.slice(0, 120),
+      stepUpUsed: Boolean(entry.stepUpUsed),
+      createdAt: serverTimestamp(),
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, path);
+  }
+}
+
+export function subscribeAuditLogs(
+  user: User,
+  onData: (logs: AuditLogEntry[]) => void,
+  onError?: (err: Error) => void
+): Unsubscribe {
+  if (!isVerifiedAdmin(user)) return () => {};
+  const path = 'audit_logs';
+  const q = query(collection(db, 'audit_logs'), orderBy('createdAt', 'desc'), limit(50));
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const logs: AuditLogEntry[] = snapshot.docs.map((s) => {
+        const d = s.data();
+        return {
+          id: s.id,
+          actorUid: String(d.actorUid || ''),
+          actorEmail: String(d.actorEmail || ''),
+          subRole: d.subRole || 'super',
+          action: String(d.action || ''),
+          target: String(d.target || ''),
+          details: String(d.details || ''),
+          deviceLabel: String(d.deviceLabel || ''),
+          stepUpUsed: Boolean(d.stepUpUsed),
+          createdAt: timestampToIso(d.createdAt),
+        };
+      });
+      onData(logs);
+    },
+    (error) => {
+      try {
+        handleFirestoreError(error, OperationType.LIST, path);
+      } catch (wrapped) {
+        if (onError && wrapped instanceof Error) onError(wrapped);
+      }
+    }
+  );
+}
+
+export async function triggerSuperAdminKillSwitch(
+  user: User,
+  currentEpoch: number,
+  devices: AdminDevice[],
+  deviceLabel: string
+): Promise<number> {
+  if (!isVerifiedAdmin(user)) return currentEpoch;
+  const uid = sanitizeId(user.uid, 'admin');
+  const nextEpoch = currentEpoch + 1;
+  try {
+    await updateDoc(doc(db, 'admins', uid), {
+      sessionEpoch: nextEpoch,
+      updatedAt: serverTimestamp(),
+    });
+    for (const dev of devices) {
+      if (dev.trusted) {
+        await revokeAdminDevice(user, dev.id);
+      }
+    }
+    await appendAuditLog(user, {
+      action: 'kill_switch.executed',
+      target: uid,
+      details: `Dhammaan sessions & trusted devices (${devices.length}) waa la xidhay. Epoch -> ${nextEpoch}`,
+      deviceLabel,
+      stepUpUsed: true,
+    });
+    return nextEpoch;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `admins/${uid}`);
+  }
 }
