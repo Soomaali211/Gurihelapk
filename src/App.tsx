@@ -425,10 +425,12 @@ export default function App() {
 
   return (
     <div
-      className={`${
-        isNativeApk ? 'h-[100dvh] overflow-hidden bg-white' : 'min-h-screen bg-[#F8FAFC]'
-      } text-[#18211C] flex flex-col font-sans w-full max-w-full overflow-x-hidden`}
-    >
+  className={`${
+    isNativeApk
+      ? 'h-[100dvh] min-h-0 overflow-hidden bg-white'
+      : 'min-h-screen bg-[#F8FAFC]'
+  } text-[#18211C] flex flex-col font-sans w-full min-w-0 max-w-full overflow-hidden`}
+      >
       {!isNativeApk && (
         <TopBar
           currentView={currentView}
