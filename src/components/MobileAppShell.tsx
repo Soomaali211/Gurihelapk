@@ -531,7 +531,7 @@ export const MobileAppShell: React.FC<MobileAppShellProps> = ({
             <div className="space-y-2">
               <button
                 onClick={() => {
-                  window.open('https://wa.me/252634421980?text=Asc%20GuriHel%20Customer%20Support', '_blank');
+                  window.open('https://wa.me/252672041985?text=Asc%20GuriHel%20Customer%20Support', '_blank');
                   setShowSupportModal(false);
                 }}
                 className="w-full py-2.5 bg-[#25D366] hover:bg-emerald-600 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors"
