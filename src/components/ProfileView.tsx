@@ -25,6 +25,7 @@ interface ProfileViewProps {
   onOpenAddModal: () => void;
   onBack?: () => void;
   firebaseUser?: FirebaseUser | null;
+  onOpenAdminPortal?: () => void;
 }
 
 export const ProfileView: React.FC<ProfileViewProps> = ({
@@ -36,6 +37,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   onOpenAddModal,
   onBack,
   firebaseUser,
+  onOpenAdminPortal,
 }) => {
   const [authStep, setAuthStep] = useState<'login' | 'otp' | 'authenticated'>(
     firebaseUser ? 'authenticated' : 'login'

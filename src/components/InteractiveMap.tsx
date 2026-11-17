@@ -49,25 +49,6 @@ interface MapPinItem {
 
 const HARGEISA_CENTER: [number, number] = [9.558, 44.068];
 
-const SUPPLEMENTAL_PINS: MapPinItem[] = [
-  { id: 'wf-56k', label: '56 K', price: 56000, lat: 9.5695, lng: 44.060, district: 'Jigjiga Yar', type: 'apartment', purpose: 'sale', title: 'Apartment 3 Qol · Jigjiga Yar' },
-  { id: 'wf-75k', label: '75 K', price: 75000, lat: 9.5670, lng: 44.0645, badge: 'star', district: 'Jigjiga Yar', type: 'villa', purpose: 'sale', title: 'Villa Cusub · Jigjiga Yar' },
-  { id: 'wf-50k-n', label: '50 K', price: 50000, lat: 9.5705, lng: 44.0800, district: 'Masalaha', type: 'land', purpose: 'sale', title: 'Boos Dhul ah · Masalaha Waqooyi' },
-  { id: 'wf-125k', label: '125 K', price: 125000, lat: 9.5640, lng: 44.0620, badge: 'check', district: 'Ibraahim Koodbuur', type: 'villa', purpose: 'sale', title: 'Villa Sharciyaysan · Ibraahim Koodbuur' },
-  { id: 'wf-55k', label: '55 K', price: 55000, lat: 9.5650, lng: 44.0815, district: 'Masalaha', type: 'apartment', purpose: 'sale', title: 'Apartment Casri ah · Masalaha' },
-  { id: 'wf-400k', label: '400 K', price: 400000, lat: 9.5630, lng: 44.0840, district: '26 June', type: 'building', purpose: 'sale', title: 'Dabaq Ganacsi 400 K · 26 June' },
-  { id: 'wf-50k-w', label: '50 K', price: 50000, lat: 9.5605, lng: 44.0580, badge: 'star', district: 'Ibraahim Koodbuur', type: 'apartment', purpose: 'sale', title: 'Big Flat · Ibraahim Koodbuur' },
-  { id: 'wf-1.6m', label: '1.6 M', price: 1600000, lat: 9.5615, lng: 44.0695, district: '26 June', type: 'building', purpose: 'sale', title: 'Dhisme Ganacsi 1.6 M · Bartamaha' },
-  { id: 'wf-70k', label: '70 K', price: 70000, lat: 9.5620, lng: 44.0750, district: '26 June', type: 'apartment', purpose: 'sale', title: 'Apartment Dabaq 3aad · 26 June' },
-  { id: 'wf-110k', label: '110 K', price: 110000, lat: 9.5565, lng: 44.0610, district: 'Shacabka', type: 'villa', purpose: 'sale', title: 'Villa Qoys · Shacabka' },
-  { id: 'wf-120k', label: '120 K', price: 120000, lat: 9.5545, lng: 44.0630, district: 'Shacabka', type: 'villa', purpose: 'sale', title: 'Villa Barxad Weyn · Shacabka' },
-  { id: 'wf-4m', label: '4 M', price: 4000000, lat: 9.5560, lng: 44.0725, isFeatured: true, district: '26 June', type: 'building', purpose: 'sale', title: 'Mashruuc Weyn (4 M USD) · 26 June' },
-  { id: 'wf-1.5k', label: '1.5 K', price: 1500, lat: 9.5535, lng: 44.0785, badge: 'star', district: 'Ahmed Dhagax', type: 'villa', purpose: 'rent', title: 'Kiro Villa Bishii · Ahmed Dhagax' },
-  { id: 'wf-220k', label: '220 K', price: 220000, lat: 9.5505, lng: 44.0675, district: 'Ahmed Dhagax', type: 'villa', purpose: 'sale', title: 'Villa 5 Qol · Ahmed Dhagax' },
-  { id: 'wf-80k', label: '80 K', price: 80000, lat: 9.5490, lng: 44.0740, district: 'Ahmed Dhagax', type: 'apartment', purpose: 'sale', title: 'Apartment Cusub · Ahmed Dhagax' },
-  { id: 'wf-30k-g', label: '30 K', price: 30000, lat: 9.5465, lng: 44.0750, isFeatured: true, district: 'Masalaha', type: 'land', purpose: 'sale', title: 'Boos Featured 30 K · Masalaha' },
-];
-
 const BROKER_AND_PROJECT_MARKERS = [
   { id: 'marker-project-1', label: 'Dahabshiil', kind: 'project' as const, lat: 9.5665, lng: 44.0735 },
   { id: 'marker-broker-1', label: 'Broker', kind: 'broker' as const, lat: 9.5625, lng: 44.0545 },
@@ -130,9 +111,8 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
     onOpenChatWithBroker,
   };
 
-  // Merge real Firebase/state listings (taking priority) with Hargeisa density pins
   const displayPins = useMemo<MapPinItem[]>(() => {
-    const firebasePins: MapPinItem[] = listings
+    return listings
       .filter((l) => typeof l.lat === 'number' && typeof l.lng === 'number' && !Number.isNaN(l.lat) && !Number.isNaN(l.lng))
       .map((l) => ({
         id: l.id,
@@ -148,18 +128,7 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
         title: l.title,
         listingRef: l,
       }));
-
-    const seenIds = new Set(firebasePins.map((p) => p.id));
-    const filteredExtras = SUPPLEMENTAL_PINS.filter((pin) => {
-      if (seenIds.has(pin.id)) return false;
-      if (purposeFilter !== 'all' && pin.purpose !== purposeFilter) return false;
-      if (typeFilter !== 'all' && pin.type !== typeFilter) return false;
-      return true;
-    });
-
-    const combined = [...firebasePins, ...filteredExtras];
-    return combined.length > 0 ? combined : SUPPLEMENTAL_PINS;
-  }, [listings, purposeFilter, typeFilter]);
+  }, [listings]);
 
   // Initialize Leaflet Map once with OpenStreetMap Basemap
   useEffect(() => {
@@ -605,8 +574,8 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
 
         {/* Center: Count */}
         <div className="h-full min-w-0 flex flex-col items-center justify-center text-center leading-tight px-1 border-r border-slate-100">
-          <span className="text-[11px] font-bold text-slate-800 tabular-nums truncate max-w-full">
-            {listings.length} from 28,089
+          <span className="text-[10px] sm:text-[11px] font-bold text-slate-800 tabular-nums truncate max-w-full">
+            {listings.length === 0 ? 'Weli guryo lama diiwaangelin' : `${listings.length} guryo`}
           </span>
           <span className="text-[10px] sm:text-[11px] font-medium text-slate-600">listings</span>
         </div>

@@ -264,7 +264,7 @@ export async function createListingInFirestore(
     lng: Number(listing.lng) || 44.065,
     verified: admin ? Boolean(listing.verified) : false,
     featured: admin ? Boolean(listing.featured) : false,
-    status: admin ? listing.status : 'pending',
+    status: admin ? (listing.status || 'live') : 'pending',
     images: (listing.images.length > 0
       ? listing.images
       : ['https://images.unsplash.com/photo-1613977257363-707ba9348227?auto=format&fit=crop&w=800&q=80']

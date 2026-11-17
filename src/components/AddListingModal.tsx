@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Check, ArrowRight, ArrowLeft, Upload, Building, MapPin, DollarSign, Layers } from 'lucide-react';
+import { X, Check, ArrowRight, ArrowLeft, Upload, Trash2, Image as ImageIcon } from 'lucide-react';
 import { Listing, ListingPurpose, PropertyType } from '../types';
 import { INITIAL_BROKERS } from '../data/mockData';
 
@@ -7,12 +7,14 @@ interface AddListingModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmitListing: (listing: Listing) => void;
+  isAdmin?: boolean;
 }
 
 export const AddListingModal: React.FC<AddListingModalProps> = ({
   isOpen,
   onClose,
   onSubmitListing,
+  isAdmin = false,
 }) => {
   const [step, setStep] = useState(1);
   const [purpose, setPurpose] = useState<ListingPurpose>('rent');
@@ -22,16 +24,19 @@ export const AddListingModal: React.FC<AddListingModalProps> = ({
   const [price, setPrice] = useState<number>(500);
   const [areaM2, setAreaM2] = useState<number>(200);
   const [bedrooms, setBedrooms] = useState<number>(3);
+  const [livingRooms, setLivingRooms] = useState<number>(1);
   const [bathrooms, setBathrooms] = useState<number>(2);
   const [district, setDistrict] = useState('Jigjiga Yar');
   const [address, setAddress] = useState('');
   const [selectedAmenities, setSelectedAmenities] = useState<string[]>([
     'Parking',
     'Water Tank',
+    'Generator',
   ]);
-  const [imageUrl, setImageUrl] = useState(
-    'https://images.unsplash.com/photo-1613977257363-707ba9348227?auto=format&fit=crop&w=800&q=80'
-  );
+  const [imageUrls, setImageUrls] = useState<string[]>([
+    'https://images.unsplash.com/photo-1613977257363-707ba9348227?auto=format&fit=crop&w=800&q=80',
+  ]);
+  const [customImageUrl, setCustomImageUrl] = useState('');
   const [isSubmitted, setIsSubmitted] = useState(false);
 
   if (!isOpen) return null;
@@ -66,13 +71,42 @@ export const AddListingModal: React.FC<AddListingModalProps> = ({
     );
   };
 
+  const handleDeviceFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files) return;
+    Array.from(e.target.files).forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = (uploadEvent) => {
+        if (uploadEvent.target?.result) {
+          setImageUrls((prev) => [...prev, uploadEvent.target!.result as string]);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleAddCustomImageUrl = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customImageUrl.trim()) return;
+    setImageUrls((prev) => [...prev, customImageUrl.trim()]);
+    setCustomImageUrl('');
+  };
+
+  const removeImage = (index: number) => {
+    setImageUrls((prev) => prev.filter((_, i) => i !== index));
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    const finalImages =
+      imageUrls.length > 0
+        ? imageUrls
+        : ['https://images.unsplash.com/photo-1613977257363-707ba9348227?auto=format&fit=crop&w=800&q=80'];
 
     const newListing: Listing = {
       id: `hga-${Date.now().toString().slice(-4)}`,
       title: title || `${propertyType.toUpperCase()} Cusub oo ${purpose === 'rent' ? 'Kiro' : purpose === 'sale' ? 'Iib' : 'Ballan'} ah`,
-      description: description || 'Guri aad u wanaagsan oo ku yaal meel degan oo Hargeysa ah.',
+      description: description || 'Guri hanti ah oo dhamaystiran oo ku yaal Hargeysa, sharcigiisu caddahay.',
       purpose,
       property_type: propertyType,
       price: Number(price) || 500,
@@ -80,20 +114,17 @@ export const AddListingModal: React.FC<AddListingModalProps> = ({
       price_unit: purpose === 'rent' ? 'month' : purpose === 'booking' ? 'night' : 'total',
       area_m2: Number(areaM2) || 150,
       bedrooms: Number(bedrooms) || 0,
-      living_rooms: 1,
+      living_rooms: Number(livingRooms) || 1,
       bathrooms: Number(bathrooms) || 1,
       city: district === 'Berbera' ? 'Berbera' : district === 'Burco' ? 'Burco' : 'Hargeisa',
       district,
-      address: address || `Waddada Weyn ee ${district}`,
-      lat: 9.555 + (Math.random() - 0.5) * 0.02,
-      lng: 44.065 + (Math.random() - 0.5) * 0.02,
-      verified: false, // New listings start unverified until admin approves
+      address: address || `Waddada Weyn ee ${district}, Hargeysa`,
+      lat: 9.558 + (Math.random() - 0.5) * 0.02,
+      lng: 44.068 + (Math.random() - 0.5) * 0.02,
+      verified: isAdmin ? true : false, // Admin added listings can be auto-verified
       featured: false,
-      status: 'pending', // Goes to Admin Queue!
-      images: [
-        imageUrl ||
-          'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=800&q=80',
-      ],
+      status: isAdmin ? 'live' : 'pending', // Admin added listings go straight live or queue
+      images: finalImages,
       amenities: selectedAmenities,
       broker: INITIAL_BROKERS[0],
       createdAt: new Date().toISOString(),
@@ -112,12 +143,14 @@ export const AddListingModal: React.FC<AddListingModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-[500] bg-black/60 backdrop-blur-xs flex items-center justify-center p-2.5 sm:p-4 overflow-y-auto">
-      <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden border border-[#C9D2CD] my-auto max-h-[92dvh] overflow-y-auto animate-in zoom-in-95 duration-200">
+      <div className="bg-white rounded-3xl shadow-2xl max-w-xl w-full overflow-hidden border border-[#C9D2CD] my-auto max-h-[92dvh] overflow-y-auto animate-in zoom-in-95 duration-200 font-sans">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50/50">
           <div>
-            <h3 className="text-base font-bold text-[#0F3D2A]">Soo Geli Hanti Cusub</h3>
-            <p className="text-xs text-slate-500">Tallaabada {step} ee 4: Buuxi xogta guriga</p>
+            <h3 className="text-base font-bold text-[#0F3D2A]">
+              {isAdmin ? '🛡️ Admin: Ku Dar Guri / Hanti Cusub' : 'Soo Geli Hanti Cusub'}
+            </h3>
+            <p className="text-xs text-slate-500">Tallaabada {step} ee 4: Macluumaadka & Sawirrada Guriga</p>
           </div>
           <button
             onClick={onClose}
@@ -132,9 +165,11 @@ export const AddListingModal: React.FC<AddListingModalProps> = ({
             <div className="w-16 h-16 rounded-full bg-emerald-100 text-[#0B7A3E] flex items-center justify-center mx-auto text-2xl shadow-inner">
               <Check className="w-8 h-8 stroke-3" />
             </div>
-            <h3 className="text-lg font-black text-[#0F3D2A]">Hantida Waa La Soo Gudbiyay!</h3>
+            <h3 className="text-lg font-black text-[#0F3D2A]">Hantida Waa La Diiwaangeliyay!</h3>
             <p className="text-xs sm:text-sm text-slate-600 max-w-xs mx-auto leading-relaxed">
-              Xayeysiiskaaga waxaa loo gudbiyay <span className="font-bold text-[#0B7A3E]">Safka Ansixinta Maamulka (Admin Approvals Queue)</span>. Waxaa lagu hubin doonaa muddo yar gudaheed.
+              {isAdmin
+                ? 'Gurgii si guul leh ayaa loogu daray suuqa GuriHel (Live waana la xaqiijiyay).'
+                : 'Xayeysiiskaaga waxaa loo gudbiyay Safka Ansixinta Maamulka (Admin Approvals Queue).'}
             </p>
             <div className="pt-4">
               <button
@@ -180,7 +215,7 @@ export const AddListingModal: React.FC<AddListingModalProps> = ({
                   <label className="text-xs font-bold text-slate-700 block mb-1.5">
                     2. Nooca Hantida (Property Type):
                   </label>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                     {[
                       { id: 'villa', label: 'Villa' },
                       { id: 'apartment', label: 'Apartment' },
@@ -239,7 +274,7 @@ export const AddListingModal: React.FC<AddListingModalProps> = ({
 
                 <div>
                   <label className="text-xs font-bold text-slate-700 block mb-1">
-                    Cinwaanka Tooska ah ama Meesha u Dhow (Landmark):
+                    Cinwaanka Tooska ah ama Meesha u Dhow (Landmark / Address):
                   </label>
                   <input
                     type="text"
@@ -251,7 +286,7 @@ export const AddListingModal: React.FC<AddListingModalProps> = ({
                 </div>
 
                 <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl text-[11px] text-emerald-800 leading-relaxed">
-                  📍 Waxaa si toos ah loogu dari doonaa Khariidadda interactive-ka ah ee Hargeysa iyadoo leh biinka qiimaha ee saxda ah.
+                  📍 Gurigani waxaa si toos ah loogu heli doonaa Khariidadda OpenStreetMap iyadoo leh biinka qiimaha ee saxda ah.
                 </div>
 
                 <div className="pt-2 flex justify-between">
@@ -307,7 +342,7 @@ export const AddListingModal: React.FC<AddListingModalProps> = ({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-3 gap-2">
                   <div>
                     <label className="text-xs font-bold text-slate-700 block mb-1">
                       Qolalka Jiifka:
@@ -316,6 +351,18 @@ export const AddListingModal: React.FC<AddListingModalProps> = ({
                       type="number"
                       value={bedrooms}
                       onChange={(e) => setBedrooms(Number(e.target.value))}
+                      className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:bg-white focus:border-[#0B7A3E] outline-none tabular-nums"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      Fadhiga (Living):
+                    </label>
+                    <input
+                      type="number"
+                      value={livingRooms}
+                      onChange={(e) => setLivingRooms(Number(e.target.value))}
                       className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:bg-white focus:border-[#0B7A3E] outline-none tabular-nums"
                     />
                   </div>
@@ -379,7 +426,7 @@ export const AddListingModal: React.FC<AddListingModalProps> = ({
               </div>
             )}
 
-            {/* Step 4: Title, Description, Image & Submit */}
+            {/* Step 4: Title, Description, Image Upload & Submit */}
             {step === 4 && (
               <div className="space-y-4">
                 <div>
@@ -398,7 +445,7 @@ export const AddListingModal: React.FC<AddListingModalProps> = ({
 
                 <div>
                   <label className="text-xs font-bold text-slate-700 block mb-1">
-                    Faahfaahin Dheeraad ah:
+                    Faahfaahin Dheeraad ah (Description):
                   </label>
                   <textarea
                     value={description}
@@ -409,16 +456,63 @@ export const AddListingModal: React.FC<AddListingModalProps> = ({
                   />
                 </div>
 
-                <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1">
-                    Sawirka Hantida (Image URL):
+                {/* Comprehensive Image Upload Section */}
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-700 block">
+                    Sawirrada Guriga (Upload from Device or URL):
                   </label>
-                  <input
-                    type="text"
-                    value={imageUrl}
-                    onChange={(e) => setImageUrl(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:bg-white focus:border-[#0B7A3E] outline-none truncate"
-                  />
+
+                  {/* File Upload Input */}
+                  <div className="flex items-center gap-2">
+                    <label className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 bg-emerald-50 hover:bg-emerald-100 text-[#0B7A3E] border border-emerald-200 rounded-xl text-xs font-bold cursor-pointer transition-colors">
+                      <Upload className="w-4 h-4" />
+                      <span>Ka soo Upload garay Sawir Taleefanka / PC-ga</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        onChange={handleDeviceFileUpload}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+
+                  {/* Add URL fallback */}
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={customImageUrl}
+                      onChange={(e) => setCustomImageUrl(e.target.value)}
+                      placeholder="Ama ku dar Image URL..."
+                      className="flex-1 p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddCustomImageUrl}
+                      className="px-3 py-2 bg-slate-800 text-white rounded-xl text-xs font-bold"
+                    >
+                      Ku Dar
+                    </button>
+                  </div>
+
+                  {/* Image Previews Grid */}
+                  {imageUrls.length > 0 && (
+                    <div className="grid grid-cols-4 gap-2 pt-1">
+                      {imageUrls.map((img, idx) => (
+                        <div key={idx} className="relative aspect-square rounded-xl overflow-hidden border border-slate-200 group bg-slate-100">
+                          <img src={img} alt={`Preview ${idx}`} className="w-full h-full object-cover" />
+                          <button
+                            type="button"
+                            onClick={() => removeImage(idx)}
+                            className="absolute top-1 right-1 p-1 bg-red-600 text-white rounded-full shadow-md opacity-80 hover:opacity-100"
+                            title="Tirtir sawirka"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div className="pt-2 flex justify-between">
@@ -435,7 +529,7 @@ export const AddListingModal: React.FC<AddListingModalProps> = ({
                     className="px-6 py-2.5 bg-[#0B7A3E] hover:bg-[#0F3D2A] text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-md transition-all active:scale-95"
                   >
                     <Check className="w-4 h-4" />
-                    Gudbi Xayeysiiska
+                    {isAdmin ? 'Gudbi oo Toos u Daabac (Live)' : 'Gudbi Xayeysiiska'}
                   </button>
                 </div>
               </div>

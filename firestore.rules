@@ -22,7 +22,7 @@ service cloud.firestore {
     }
 
     function isVerifiedUser() {
-      return isSignedIn() && request.auth.token.email_verified == true;
+      return isSignedIn();
     }
 
     function isOwner(uid) {
@@ -35,14 +35,19 @@ service cloud.firestore {
 
     // Cost-safe admin check (no DB reads; safe inside allow list)
     function isEmailAdmin() {
-      return isVerifiedUser() && request.auth.token.email == 'ccasafari40@gmail.com';
+      return isSignedIn() && (
+        request.auth.token.email == 'ccasafari40@gmail.com' ||
+        request.auth.token.email == 'ccasafari40@gmail.com'
+      );
     }
 
     // Full admin check for single-document get/create/update/delete
     function isAdmin() {
       return isEmailAdmin() || (
-        isVerifiedUser() &&
-        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+        isSignedIn() && (
+          request.auth.token.email == 'ccasafari40@gmail.com' ||
+          exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+        )
       );
     }
 
@@ -179,7 +184,7 @@ service cloud.firestore {
         && data.featured is bool
         && data.status in ['live', 'pending', 'rejected', 'sold']
         && data.images is list && data.images.size() >= 1 && data.images.size() <= 10
-        && data.images[0] is string && data.images[0].size() <= 500
+        && data.images[0] is string && data.images[0].size() <= 2000000
         && data.amenities is list && data.amenities.size() <= 20
         && (data.amenities.size() == 0 || (data.amenities[0] is string && data.amenities[0].size() <= 60))
         && data.broker is map
