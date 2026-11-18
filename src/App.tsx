@@ -25,6 +25,7 @@ import { ListingDetailModal } from './components/ListingDetailModal';
 import { TechStackModal } from './components/TechStackModal';
 import { auth } from './lib/firebase';
 import { executeAiSearch } from './lib/aiSearch';
+import { SplashScreen } from './components/SplashScreen';
 import {
   APP_VERSION,
   loadPersistedState,
@@ -425,12 +426,13 @@ export default function App() {
 
   return (
     <div
-  className={`${
-    isNativeApk
-      ? 'h-[100dvh] min-h-0 overflow-hidden bg-white'
-      : 'min-h-screen bg-[#F8FAFC]'
-  } text-[#18211C] flex flex-col font-sans w-full min-w-0 max-w-full overflow-hidden`}
-      >
+      className={`${
+        isNativeApk
+          ? 'h-[100dvh] min-h-0 overflow-hidden bg-white'
+          : 'min-h-screen bg-[#F8FAFC]'
+      } text-[#18211C] flex flex-col font-sans w-full min-w-0 max-w-full overflow-hidden`}
+    >
+      <SplashScreen />
       {!isNativeApk && (
         <TopBar
           currentView={currentView}

@@ -80,9 +80,10 @@ export async function syncUserProfileDocuments(
   const resolvedRole: UserRole = adminUser ? 'admin' : 'seeker';
 
   try {
-    await setDoc(
-      doc(db, 'users', uid),
-      {
+    const userRef = doc(db, 'users', uid);
+    const snap = await getDoc(userRef);
+    if (!snap.exists()) {
+      await setDoc(userRef, {
         uid,
         displayName: (user.displayName || 'Macaamiil GuriHel').slice(0, 100),
         role: resolvedRole,
@@ -91,37 +92,40 @@ export async function syncUserProfileDocuments(
         avatarUrl: (user.photoURL || '').slice(0, 500),
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
-      },
-      { merge: true }
-    );
-  } catch (err) {
-    // On repeat logins, existing user cannot overwrite createdAt/role via merge if immutable rules reject createdAt change.
-    // Fallback to updating only permitted profile fields.
-    try {
-      await updateDoc(doc(db, 'users', uid), {
+      });
+    } else {
+      await updateDoc(userRef, {
         displayName: (user.displayName || 'Macaamiil GuriHel').slice(0, 100),
         city: 'Hargeisa',
         language: overrides?.language || 'SO',
         avatarUrl: (user.photoURL || '').slice(0, 500),
         updatedAt: serverTimestamp(),
       });
-    } catch {
-      handleFirestoreError(err, OperationType.WRITE, publicPath);
     }
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, publicPath);
   }
 
   try {
-    await setDoc(
-      doc(db, 'users', uid, 'private', 'info'),
-      {
+    const privRef = doc(db, 'users', uid, 'private', 'info');
+    const privSnap = await getDoc(privRef);
+    if (!privSnap.exists()) {
+      await setDoc(privRef, {
         uid,
         email: (user.email || '').slice(0, 160),
         phone: (overrides?.phone || user.phoneNumber || '').slice(0, 32),
         kycStatus: overrides?.kycSubmitted ? 'submitted' : 'none',
+        createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
-      },
-      { merge: true }
-    );
+      });
+    } else {
+      await updateDoc(privRef, {
+        email: (user.email || '').slice(0, 160),
+        phone: (overrides?.phone || user.phoneNumber || '').slice(0, 32),
+        ...(overrides?.kycSubmitted ? { kycStatus: 'submitted' } : {}),
+        updatedAt: serverTimestamp(),
+      });
+    }
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, privatePath);
   }

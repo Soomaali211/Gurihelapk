@@ -184,7 +184,7 @@ service cloud.firestore {
         && data.featured is bool
         && data.status in ['live', 'pending', 'rejected', 'sold']
         && data.images is list && data.images.size() >= 1 && data.images.size() <= 10
-        && data.images[0] is string && data.images[0].size() <= 2000000
+        && data.images[0] is string && data.images[0].size() <= 10000000
         && data.amenities is list && data.amenities.size() <= 20
         && (data.amenities.size() == 0 || (data.amenities[0] is string && data.amenities[0].size() <= 60))
         && data.broker is map
@@ -372,14 +372,14 @@ service cloud.firestore {
       allow create: if isValidId(adminId)
         && isEmailAdmin()
         && isValidAdminRecord(incoming(), adminId)
-        && incoming().createdAt == request.time
-        && incoming().updatedAt == request.time;
+        && incoming().createdAt is timestamp
+        && incoming().updatedAt is timestamp;
       allow update: if isValidId(adminId)
         && isEmailAdmin()
         && isValidAdminRecord(incoming(), adminId)
         && incoming().uid == existing().uid
         && incoming().createdAt == existing().createdAt
-        && incoming().updatedAt == request.time
+        && incoming().updatedAt is timestamp
         && incoming().diff(existing()).affectedKeys().hasOnly([
           'subRole', 'status', 'mfaEnabled', 'totpSecretEnc',
           'recoveryCodeHashes', 'sessionEpoch', 'updatedAt'
@@ -395,15 +395,15 @@ service cloud.firestore {
         && isEmailAdmin()
         && isValidAdminDevice(incoming(), deviceId)
         && incoming().adminUid == request.auth.uid
-        && incoming().createdAt == request.time
-        && incoming().updatedAt == request.time;
+        && incoming().createdAt is timestamp
+        && incoming().updatedAt is timestamp;
       allow update: if isValidId(deviceId)
         && isEmailAdmin()
         && isValidAdminDevice(incoming(), deviceId)
         && incoming().id == existing().id
         && incoming().adminUid == existing().adminUid
         && incoming().createdAt == existing().createdAt
-        && incoming().updatedAt == request.time
+        && incoming().updatedAt is timestamp
         && incoming().diff(existing()).affectedKeys().hasOnly([
           'trusted', 'label', 'lastSeenAt', 'updatedAt'
         ]);
@@ -418,15 +418,15 @@ service cloud.firestore {
         && isEmailAdmin()
         && isValidAdminInvitation(incoming(), inviteId)
         && incoming().invitedByUid == request.auth.uid
-        && incoming().createdAt == request.time
-        && incoming().updatedAt == request.time;
+        && incoming().createdAt is timestamp
+        && incoming().updatedAt is timestamp;
       allow update: if isValidId(inviteId)
         && isEmailAdmin()
         && isValidAdminInvitation(incoming(), inviteId)
         && incoming().id == existing().id
         && incoming().invitedByUid == existing().invitedByUid
         && incoming().createdAt == existing().createdAt
-        && incoming().updatedAt == request.time
+        && incoming().updatedAt is timestamp
         && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']);
       allow delete: if isValidId(inviteId) && isEmailAdmin();
     }
@@ -439,7 +439,7 @@ service cloud.firestore {
         && isEmailAdmin()
         && isValidAuditLog(incoming(), logId)
         && incoming().actorUid == request.auth.uid
-        && incoming().createdAt == request.time;
+        && incoming().createdAt is timestamp;
       allow update, delete: if false;
     }
 
@@ -452,19 +452,17 @@ service cloud.firestore {
         && isValidUserPublic(incoming(), userId)
         && (isOwner(userId) || isAdmin())
         && (isAdmin() || incoming().role == 'seeker')
-        && incoming().createdAt == request.time
-        && incoming().updatedAt == request.time;
+        && incoming().createdAt is timestamp
+        && incoming().updatedAt is timestamp;
       allow update: if isValidId(userId)
         && isVerifiedUser()
-        && isValidUserPublic(incoming(), userId)
-        && incoming().uid == existing().uid
-        && incoming().createdAt == existing().createdAt
-        && incoming().updatedAt == request.time
+        && incoming().uid == userId
+        && incoming().updatedAt is timestamp
         && (
           isAdmin() ||
           (
             isOwner(userId)
-            && incoming().role == existing().role
+            && (!('role' in incoming()) || incoming().role == existing().role)
             && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'city', 'language', 'avatarUrl', 'updatedAt'])
           )
         );
@@ -479,17 +477,15 @@ service cloud.firestore {
           && (isOwner(userId) || isAdmin())
           && isValidUserPrivate(incoming(), userId)
           && (isAdmin() || incoming().kycStatus in ['none', 'submitted'])
-          && incoming().updatedAt == request.time;
+          && incoming().updatedAt is timestamp;
         allow update: if isValidId(userId) && isValidId(docId)
           && isVerifiedUser()
-          && isValidUserPrivate(incoming(), userId)
-          && incoming().uid == existing().uid
-          && incoming().updatedAt == request.time
+          && incoming().uid == userId
+          && incoming().updatedAt is timestamp
           && (
             isAdmin() ||
             (
               isOwner(userId)
-              && incoming().kycStatus in ['none', 'submitted']
               && incoming().diff(existing()).affectedKeys().hasOnly(['email', 'phone', 'kycStatus', 'kycDocumentRef', 'updatedAt'])
             )
           );
@@ -504,7 +500,7 @@ service cloud.firestore {
           && isVerifiedUser()
           && isOwner(userId)
           && isValidFavorite(incoming(), userId, listingId)
-          && incoming().createdAt == request.time;
+          && incoming().createdAt is timestamp;
         allow delete: if isValidId(userId) && isValidId(listingId) && isVerifiedUser() && (isOwner(userId) || isAdmin());
         allow update: if false;
       }
@@ -519,39 +515,22 @@ service cloud.firestore {
       );
       allow list: if resource.data.status == 'live'
         || (isSignedIn() && resource.data.ownerUid == request.auth.uid)
-        || isEmailAdmin();
+        || isEmailAdmin()
+        || isSignedIn();
       allow create: if isValidId(listingId)
-        && isVerifiedUser()
+        && isSignedIn()
         && isValidListing(incoming(), listingId)
-        && incoming().ownerUid == request.auth.uid
-        && incoming().createdAt == request.time
-        && incoming().updatedAt == request.time
-        && (
-          isAdmin() ||
-          (incoming().status == 'pending' && incoming().verified == false && incoming().featured == false)
-        );
+        && (isAdmin() || incoming().ownerUid == request.auth.uid)
+        && incoming().status in ['pending', 'live'];
       allow update: if isValidId(listingId)
-        && isVerifiedUser()
-        && isValidListing(incoming(), listingId)
+        && isSignedIn()
         && incoming().id == existing().id
         && incoming().ownerUid == existing().ownerUid
-        && incoming().createdAt == existing().createdAt
-        && incoming().updatedAt == request.time
         && (
           isAdmin() ||
-          (
-            existing().ownerUid == request.auth.uid
-            && existing().status != 'sold'
-            && incoming().status == existing().status
-            && incoming().verified == existing().verified
-            && incoming().featured == existing().featured
-            && incoming().diff(existing()).affectedKeys().hasOnly([
-              'title', 'description', 'price', 'area_m2', 'bedrooms', 'bathrooms',
-              'address', 'images', 'amenities', 'updatedAt'
-            ])
-          )
+          existing().ownerUid == request.auth.uid
         );
-      allow delete: if isValidId(listingId) && isVerifiedUser() && (isAdmin() || existing().ownerUid == request.auth.uid);
+      allow delete: if isValidId(listingId) && isSignedIn() && (isAdmin() || existing().ownerUid == request.auth.uid);
     }
 
     // 4. Projects
@@ -561,14 +540,14 @@ service cloud.firestore {
       allow create: if isValidId(projectId)
         && isAdmin()
         && isValidProject(incoming(), projectId)
-        && incoming().createdAt == request.time
-        && incoming().updatedAt == request.time;
+        && incoming().createdAt is timestamp
+        && incoming().updatedAt is timestamp;
       allow update: if isValidId(projectId)
         && isAdmin()
         && isValidProject(incoming(), projectId)
         && incoming().id == existing().id
         && incoming().createdAt == existing().createdAt
-        && incoming().updatedAt == request.time;
+        && incoming().updatedAt is timestamp;
       allow delete: if isValidId(projectId) && isAdmin();
     }
 
@@ -581,8 +560,8 @@ service cloud.firestore {
         && isValidBooking(incoming(), bookingId)
         && incoming().guestUid == request.auth.uid
         && incoming().status == 'held'
-        && incoming().createdAt == request.time
-        && incoming().updatedAt == request.time
+        && incoming().createdAt is timestamp
+        && incoming().updatedAt is timestamp
         && exists(/databases/$(database)/documents/listings/$(incoming().listingId));
       allow update: if isValidId(bookingId)
         && isVerifiedUser()
@@ -591,7 +570,7 @@ service cloud.firestore {
         && incoming().guestUid == existing().guestUid
         && incoming().listingId == existing().listingId
         && incoming().createdAt == existing().createdAt
-        && incoming().updatedAt == request.time
+        && incoming().updatedAt is timestamp
         && (
           isAdmin() ||
           (
@@ -612,15 +591,15 @@ service cloud.firestore {
         && isVerifiedUser()
         && isValidChatThread(incoming(), threadId)
         && incoming().participantUid == request.auth.uid
-        && incoming().createdAt == request.time
-        && incoming().updatedAt == request.time;
+        && incoming().createdAt is timestamp
+        && incoming().updatedAt is timestamp;
       allow update: if isValidId(threadId)
         && isVerifiedUser()
         && isValidChatThread(incoming(), threadId)
         && incoming().id == existing().id
         && incoming().participantUid == existing().participantUid
         && incoming().createdAt == existing().createdAt
-        && incoming().updatedAt == request.time
+        && incoming().updatedAt is timestamp
         && (
           isAdmin() ||
           (
@@ -642,7 +621,7 @@ service cloud.firestore {
           && isVerifiedUser()
           && isValidChatMessage(incoming(), messageId)
           && incoming().senderUid == request.auth.uid
-          && incoming().createdAt == request.time
+          && incoming().createdAt is timestamp
           && exists(/databases/$(database)/documents/chatThreads/$(threadId))
           && incoming().threadParticipantUid == get(/databases/$(database)/documents/chatThreads/$(threadId)).data.participantUid
           && (
@@ -662,15 +641,15 @@ service cloud.firestore {
         && isValidSearchRequest(incoming(), requestId)
         && incoming().ownerUid == request.auth.uid
         && incoming().status == 'open'
-        && incoming().createdAt == request.time
-        && incoming().updatedAt == request.time;
+        && incoming().createdAt is timestamp
+        && incoming().updatedAt is timestamp;
       allow update: if isValidId(requestId)
         && isVerifiedUser()
         && isValidSearchRequest(incoming(), requestId)
         && incoming().id == existing().id
         && incoming().ownerUid == existing().ownerUid
         && incoming().createdAt == existing().createdAt
-        && incoming().updatedAt == request.time
+        && incoming().updatedAt is timestamp
         && (
           isAdmin() ||
           (
@@ -692,15 +671,15 @@ service cloud.firestore {
         && isValidLeaseContract(incoming(), contractId)
         && incoming().ownerUid == request.auth.uid
         && incoming().status == 'draft'
-        && incoming().createdAt == request.time
-        && incoming().updatedAt == request.time;
+        && incoming().createdAt is timestamp
+        && incoming().updatedAt is timestamp;
       allow update: if isValidId(contractId)
         && isVerifiedUser()
         && isValidLeaseContract(incoming(), contractId)
         && incoming().id == existing().id
         && incoming().ownerUid == existing().ownerUid
         && incoming().createdAt == existing().createdAt
-        && incoming().updatedAt == request.time
+        && incoming().updatedAt is timestamp
         && (
           isAdmin() ||
           (

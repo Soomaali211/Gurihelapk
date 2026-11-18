@@ -68,6 +68,11 @@ export const ListingCard: React.FC<ListingCardProps> = ({
             {listing.price_unit === 'month' ? '/bil' : listing.price_unit === 'night' ? '/habeen' : ''}
           </span>
         </div>
+
+        {/* Subtle Watermark Badge (35% opacity) */}
+        <div className="absolute bottom-2.5 right-2.5 bg-black/40 backdrop-blur-2xs text-white/90 px-2 py-0.5 rounded-md text-[9px] font-extrabold tracking-wider uppercase pointer-events-none flex items-center gap-1 shadow-xs z-10">
+          <span>🏠 GuriHel</span>
+        </div>
       </div>
 
       {/* Content */}
