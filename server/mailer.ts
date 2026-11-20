@@ -1,22 +1,96 @@
 import nodemailer from 'nodemailer';
 
 export interface EmailOtpDeliveryResult {
-  provider: 'resend' | 'smtp';
+  provider: 'gmail_smtp';
   messageId?: string;
 }
 
-export function isEmailProviderConfigured(): boolean {
-  const hasResend = Boolean(process.env.RESEND_API_KEY?.trim());
-  const hasSmtp = Boolean(process.env.SMTP_HOST?.trim());
-  return hasResend || hasSmtp;
+export interface SmtpTransportConfig {
+  host: string;
+  port: number;
+  secure: boolean;
+  requireTLS: boolean;
+  user: string;
+  pass: string;
+  from: string;
 }
 
-function getFromAddress(): string {
-  return (
-    process.env.EMAIL_FROM?.trim() ||
-    process.env.SMTP_USER?.trim() ||
-    'GuriHel <no-reply@gurihel.com>'
-  );
+function normalizeAppPassword(rawPass: string): string {
+  const trimmed = rawPass.trim();
+  if (/^[a-z]{4}(?:\s[a-z]{4}){3}$/i.test(trimmed)) {
+    return trimmed.replace(/\s+/g, '');
+  }
+  return rawPass;
+}
+
+export function getSmtpConfig(): SmtpTransportConfig | null {
+  const user = process.env.SMTP_USER?.trim() || '';
+  const pass = normalizeAppPassword(process.env.SMTP_PASS || '');
+  if (!user || !pass) {
+    return null;
+  }
+
+  const host = process.env.SMTP_HOST?.trim() || 'smtp.gmail.com';
+  const parsedPort = Number(process.env.SMTP_PORT || 587);
+  const port = Number.isFinite(parsedPort) && parsedPort > 0 ? parsedPort : 587;
+  const secure =
+    process.env.SMTP_SECURE !== undefined
+      ? process.env.SMTP_SECURE.trim().toLowerCase() === 'true'
+      : port === 465;
+
+  const isLocalRelay = host === '127.0.0.1' || host === 'localhost';
+  const requireTLS = !secure && port === 587 && !isLocalRelay;
+  const from = process.env.EMAIL_FROM?.trim() || `GuriHel <${user}>`;
+
+  return {
+    host,
+    port,
+    secure,
+    requireTLS,
+    user,
+    pass,
+    from,
+  };
+}
+
+export function isEmailProviderConfigured(): boolean {
+  return Boolean(getSmtpConfig());
+}
+
+function createSmtpTransporter(cfg: SmtpTransportConfig) {
+  return nodemailer.createTransport({
+    host: cfg.host,
+    port: cfg.port,
+    secure: cfg.secure,
+    requireTLS: cfg.requireTLS,
+    auth: {
+      user: cfg.user,
+      pass: cfg.pass,
+    },
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 15000,
+  });
+}
+
+export async function verifySmtpTransport(): Promise<{ ok: boolean; error?: string }> {
+  const cfg = getSmtpConfig();
+  if (!cfg) {
+    return {
+      ok: false,
+      error: 'Gmail SMTP credentials (SMTP_USER and SMTP_PASS) are not configured.',
+    };
+  }
+  try {
+    const transporter = createSmtpTransporter(cfg);
+    await transporter.verify();
+    return { ok: true };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : 'SMTP verification failed.',
+    };
+  }
 }
 
 function buildOtpEmailContent(code: string, expiresMinutes: number) {
@@ -51,68 +125,27 @@ export async function sendVerificationOtpEmail(params: {
   code: string;
   expiresMinutes?: number;
 }): Promise<EmailOtpDeliveryResult> {
+  const cfg = getSmtpConfig();
+  if (!cfg) {
+    throw new Error(
+      'Gmail SMTP delivery is not configured. Configure SMTP_USER and SMTP_PASS.'
+    );
+  }
+
   const expiresMinutes = params.expiresMinutes ?? 5;
-  const from = getFromAddress();
   const { subject, text, html } = buildOtpEmailContent(params.code, expiresMinutes);
+  const transporter = createSmtpTransporter(cfg);
 
-  const resendKey = process.env.RESEND_API_KEY?.trim();
-  if (resendKey) {
-    const resp = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${resendKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        from,
-        to: [params.to],
-        subject,
-        text,
-        html,
-      }),
-    });
+  const info = await transporter.sendMail({
+    from: cfg.from,
+    to: params.to,
+    subject,
+    text,
+    html,
+  });
 
-    if (!resp.ok) {
-      const errBody = await resp.text().catch(() => '');
-      throw new Error(`Email provider error (${resp.status}): ${errBody.slice(0, 200)}`);
-    }
-
-    const data = (await resp.json().catch(() => ({}))) as { id?: string };
-    return { provider: 'resend', messageId: data.id };
-  }
-
-  const smtpHost = process.env.SMTP_HOST?.trim();
-  if (smtpHost) {
-    const port = Number(process.env.SMTP_PORT || 587);
-    const secure =
-      process.env.SMTP_SECURE !== undefined
-        ? process.env.SMTP_SECURE.toLowerCase() === 'true'
-        : port === 465;
-    const smtpUser = process.env.SMTP_USER?.trim();
-    const smtpPass = process.env.SMTP_PASS || '';
-
-    const transporter = nodemailer.createTransport({
-      host: smtpHost,
-      port: Number.isFinite(port) && port > 0 ? port : 587,
-      secure,
-      auth: smtpUser ? { user: smtpUser, pass: smtpPass } : undefined,
-      connectionTimeout: 10000,
-      greetingTimeout: 10000,
-      socketTimeout: 15000,
-    });
-
-    const info = await transporter.sendMail({
-      from,
-      to: params.to,
-      subject,
-      text,
-      html,
-    });
-
-    return { provider: 'smtp', messageId: info.messageId };
-  }
-
-  throw new Error(
-    'Email delivery provider is not configured. Configure RESEND_API_KEY or SMTP_HOST/SMTP_PORT/SMTP_USER/SMTP_PASS.'
-  );
+  return {
+    provider: 'gmail_smtp',
+    messageId: info.messageId,
+  };
 }

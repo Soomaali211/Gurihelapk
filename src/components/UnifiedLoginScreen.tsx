@@ -5,13 +5,10 @@ import {
   CheckCircle2,
   Loader2,
   Mail,
-  MapPin,
-  Phone,
   RefreshCw,
-  User,
 } from 'lucide-react';
 import { AuthUser } from '../types';
-import { requestEmailOtp, updateMyProfile, verifyEmailOtp } from '../lib/apiClient';
+import { requestEmailOtp, verifyEmailOtp } from '../lib/apiClient';
 
 interface UnifiedLoginScreenProps {
   onAuthenticated: (user: AuthUser) => void;
@@ -19,7 +16,7 @@ interface UnifiedLoginScreenProps {
   onBack?: () => void;
 }
 
-type AuthStep = 'email' | 'otp' | 'onboarding';
+type AuthStep = 'email' | 'otp';
 
 const EMPTY_DIGITS = ['', '', '', '', '', ''];
 
@@ -40,12 +37,6 @@ export const UnifiedLoginScreen: React.FC<UnifiedLoginScreenProps> = ({
   const [digits, setDigits] = useState<string[]>([...EMPTY_DIGITS]);
   const [expirySecondsLeft, setExpirySecondsLeft] = useState(300);
   const [resendCooldownLeft, setResendCooldownLeft] = useState(0);
-
-  // Onboarding state for newly created accounts
-  const [pendingUser, setPendingUser] = useState<AuthUser | null>(null);
-  const [fullName, setFullName] = useState('');
-  const [city, setCity] = useState('Hargeisa');
-  const [phoneE164, setPhoneE164] = useState('');
 
   const [busy, setBusy] = useState(false);
   const [verifiedSuccess, setVerifiedSuccess] = useState(false);
@@ -122,16 +113,7 @@ export const UnifiedLoginScreen: React.FC<UnifiedLoginScreenProps> = ({
       });
 
       setVerifiedSuccess(true);
-      if (res.requiresProfileCompletion) {
-        setPendingUser(res.user);
-        setFullName(res.user.fullName || '');
-        setCity(res.user.city || 'Hargeisa');
-        setPhoneE164(res.user.phoneE164 || '');
-        setStep('onboarding');
-        setVerifiedSuccess(false);
-      } else {
-        onAuthenticated(res.user);
-      }
+      onAuthenticated(res.user);
     } catch (err) {
       setVerifiedSuccess(false);
       setError(err instanceof Error ? err.message : 'Verification failed.');
@@ -230,30 +212,6 @@ export const UnifiedLoginScreen: React.FC<UnifiedLoginScreenProps> = ({
     }
   };
 
-  const handleOnboardingSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (busy || !pendingUser) return;
-    if (fullName.trim().length < 2) {
-      setError('Please enter your full name (minimum 2 characters).');
-      return;
-    }
-
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await updateMyProfile({
-        fullName: fullName.trim(),
-        city,
-        phoneE164: phoneE164.trim(),
-      });
-      onAuthenticated(res.user);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not save your profile.');
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const handleChangeEmail = () => {
     setStep('email');
     setDigits([...EMPTY_DIGITS]);
@@ -276,7 +234,7 @@ export const UnifiedLoginScreen: React.FC<UnifiedLoginScreenProps> = ({
             >
               <ArrowLeft className="w-6 h-6 stroke-[2.2]" />
             </button>
-          ) : step === 'email' && onBack ? (
+          ) : onBack ? (
             <button
               type="button"
               onClick={onBack}
@@ -467,7 +425,7 @@ export const UnifiedLoginScreen: React.FC<UnifiedLoginScreenProps> = ({
                     <span>Verifying...</span>
                   </>
                 ) : (
-                  <span>Verify &amp; Continue</span>
+                  <span>Verify</span>
                 )}
               </button>
             </form>
@@ -481,90 +439,6 @@ export const UnifiedLoginScreen: React.FC<UnifiedLoginScreenProps> = ({
                 Change email address
               </button>
             </div>
-          </div>
-        )}
-
-        {/* STEP 3: NEW ACCOUNT PROFILE COMPLETION */}
-        {step === 'onboarding' && (
-          <div className="mt-8 space-y-6 flex-1 flex flex-col">
-            <div className="space-y-1.5">
-              <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
-                Complete your profile
-              </h1>
-              <p className="text-sm text-slate-600 leading-relaxed">
-                Your email <span className="font-semibold text-slate-900">{trimmedEmail}</span> is verified. Add your name to finish setting up your account.
-              </p>
-            </div>
-
-            <form onSubmit={handleOnboardingSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  Full Name *
-                </label>
-                <div className="flex items-center h-12 rounded-xl border border-slate-300 bg-[#F4F6F8] px-3.5 focus-within:border-[#0B7A3E] focus-within:bg-white">
-                  <User className="w-4 h-4 text-slate-400 mr-2.5 shrink-0" />
-                  <input
-                    type="text"
-                    required
-                    minLength={2}
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    placeholder="e.g. Axmed Maxamed Xasan"
-                    className="flex-1 min-w-0 bg-transparent text-sm font-semibold text-slate-900 outline-none"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">City</label>
-                  <div className="flex items-center h-12 rounded-xl border border-slate-300 bg-[#F4F6F8] px-3 focus-within:border-[#0B7A3E] focus-within:bg-white">
-                    <MapPin className="w-4 h-4 text-slate-400 mr-2 shrink-0" />
-                    <select
-                      value={city}
-                      onChange={(e) => setCity(e.target.value)}
-                      className="flex-1 min-w-0 bg-transparent text-xs font-semibold text-slate-900 outline-none"
-                    >
-                      <option value="Hargeisa">Hargeisa</option>
-                      <option value="Berbera">Berbera</option>
-                      <option value="Burco">Burco</option>
-                      <option value="Borama">Borama</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                    Phone (Optional)
-                  </label>
-                  <div className="flex items-center h-12 rounded-xl border border-slate-300 bg-[#F4F6F8] px-3 focus-within:border-[#0B7A3E] focus-within:bg-white">
-                    <Phone className="w-4 h-4 text-slate-400 mr-2 shrink-0" />
-                    <input
-                      type="tel"
-                      value={phoneE164}
-                      onChange={(e) => setPhoneE164(e.target.value)}
-                      placeholder="+252..."
-                      className="flex-1 min-w-0 bg-transparent text-xs font-medium text-slate-900 outline-none"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={busy || fullName.trim().length < 2}
-                className="w-full h-12 rounded-xl text-sm font-bold text-white bg-[#0B7A3E] hover:bg-[#0F3D2A] disabled:bg-[#8CC2A3] flex items-center justify-center gap-2 shadow-sm transition-colors"
-              >
-                {busy ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Saving...</span>
-                  </>
-                ) : (
-                  <span>Continue to GuriHel</span>
-                )}
-              </button>
-            </form>
           </div>
         )}
       </div>

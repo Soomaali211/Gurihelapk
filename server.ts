@@ -617,7 +617,7 @@ app.post('/api/v1/auth/otp/request', async (req: Request, res: Response) => {
   if (!isEmailProviderConfigured()) {
     res.status(503).json({
       error:
-        'Email verification service is not configured. Please configure RESEND_API_KEY or SMTP settings.',
+        'Email verification service is not configured on the server. Please configure Gmail SMTP credentials (SMTP_USER and SMTP_PASS).',
       code: 'EMAIL_PROVIDER_UNCONFIGURED',
     });
     return;
@@ -899,21 +899,39 @@ app.post('/api/v1/auth/otp/verify', (req: Request, res: Response) => {
     if (!existingRow) {
       isNewUser = true;
       verifiedUserId = `usr_${nowMs.toString(36)}_${crypto.randomBytes(4).toString('hex')}`;
+      const localPart = email.split('@')[0] || '';
+      const cleanedWords = localPart
+        .replace(/[^a-zA-Z0-9]+/g, ' ')
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 4)
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+      const derivedFullName = (cleanedWords.join(' ') || 'GuriHel Member').slice(0, 100);
       db.prepare(
         `INSERT INTO users (
           id, username, email, phone_e164, password_hash, role, is_primary_admin, email_verified,
           full_name, city, language, profile_completed, status, created_at, updated_at, last_login_at
-        ) VALUES (?, '', ?, '', '', 'user', 0, 1, '', 'Hargeisa', 'SO', 0, 'active', ?, ?, ?)`
-      ).run(verifiedUserId, email, nowIso, nowIso, nowIso);
+        ) VALUES (?, '', ?, '', '', 'user', 0, 1, ?, 'Hargeisa', 'SO', 1, 'active', ?, ?, ?)`
+      ).run(verifiedUserId, email, derivedFullName, nowIso, nowIso, nowIso);
     } else {
       const existingUser = rowToDbUser(existingRow);
       verifiedUserId = existingUser.id;
       if (existingUser.status === 'blocked') {
         userBlocked = true;
       } else {
+        const localPart = email.split('@')[0] || '';
+        const cleanedWords = localPart
+          .replace(/[^a-zA-Z0-9]+/g, ' ')
+          .trim()
+          .split(/\s+/)
+          .filter(Boolean)
+          .slice(0, 4)
+          .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+        const nextFullName = existingUser.fullName || (cleanedWords.join(' ') || 'GuriHel Member').slice(0, 100);
         db.prepare(
-          'UPDATE users SET email_verified = 1, last_login_at = ?, updated_at = ? WHERE id = ?'
-        ).run(nowIso, nowIso, verifiedUserId);
+          'UPDATE users SET email_verified = 1, profile_completed = 1, full_name = ?, last_login_at = ?, updated_at = ? WHERE id = ?'
+        ).run(nextFullName, nowIso, nowIso, verifiedUserId);
       }
     }
     db.exec('COMMIT;');
@@ -972,7 +990,7 @@ app.post('/api/v1/auth/otp/verify', (req: Request, res: Response) => {
     refreshToken: sess.refreshToken,
     expiresAt: sess.expiresAt,
     isNewUser,
-    requiresProfileCompletion: !isAdminRole(freshUser.role) && !freshUser.profileCompleted,
+    requiresProfileCompletion: false,
     user: freshUser,
   });
 });
@@ -3282,6 +3300,7 @@ app.get('/api/health', (_req: Request, res: Response) => {
   res.json({
     status: 'ok',
     authMode: 'email-otp-rbac',
+    emailTransport: 'gmail_smtp',
     emailProviderConfigured: isEmailProviderConfigured(),
     geminiConfigured: Boolean(apiKey),
     database: 'sqlite (persistent)',

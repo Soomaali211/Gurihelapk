@@ -1,0 +1,101 @@
+CRITICAL REQUIREMENT — FULLY AUTOMATED IMPLEMENTATION, ZERO MANUAL SETUP BY THE APP OWNER
+
+You must complete the entire authentication system independently.
+
+I do not want to perform any technical setup, configuration, coding, database operations, API configuration, or deployment preparation.
+
+Your responsibility is to inspect the existing project, make all necessary technical decisions, implement everything, connect all components, configure the available infrastructure, run tests, and complete the authentication system.
+
+1. ZERO MANUAL TECHNICAL WORK FOR ME
+
+Do not ask me to:
+
+- Create database tables manually.
+- Run SQL queries.
+- Create API endpoints.
+- Write or modify code manually.
+- Configure authentication manually.
+- Create email templates.
+- Set up frontend or backend integrations.
+- Configure environment variables manually.
+- Run migrations manually.
+- Install packages manually.
+- Configure token systems.
+- Create Admin accounts manually.
+- Perform deployment-related technical procedures.
+
+You must perform all these tasks yourself using the existing project and available tools.
+
+2. AUTOMATIC EMAIL VERIFICATION SETUP
+
+You are responsible for making real email OTP delivery work.
+
+- Inspect the existing backend and available email services.
+- Reuse any existing configured email provider.
+- If email delivery is not configured, determine the best compatible solution and implement the integration.
+- Use available credentials and connected services where possible.
+- Never invent API keys, passwords, SMTP credentials, or provider accounts.
+- Never pretend email delivery is working when it is not.
+- Do not leave fake or simulated OTP verification in the production implementation.
+
+If an external account, credential, or authorization is genuinely unavailable and cannot be obtained through your available tools, identify that exact external dependency. Do not ask me to perform unrelated technical work or pretend that the system is complete.
+
+3. MY ONLY RESPONSIBILITY WHEN USING THE APP
+
+The final login experience must be extremely simple:
+
+1. I open the application.
+2. I enter my email address.
+3. I press Continue.
+4. The application sends a verification code to my email.
+5. I open my email, copy the code, return to the application, and paste it into the verification field.
+6. I press Verify.
+7. The application automatically authenticates me and opens the correct existing dashboard.
+
+I must not need to enter a password, create an account manually, configure anything, or contact a developer.
+
+For new ordinary users, complete any required account creation automatically after successful email verification, using the existing account requirements and a secure default user role. Do not introduce additional registration steps unless the existing application genuinely requires information that cannot be obtained otherwise.
+
+4. AUTOMATIC PRIMARY ADMIN INITIALIZATION
+
+The primary Admin email is:
+
+ddhamaan@gmail.com
+
+You must securely initialize this account in the existing database as the primary Super Admin.
+
+- Complete the initialization automatically.
+- Prevent duplicate accounts.
+- Preserve existing account data.
+- Verify email ownership through OTP.
+- Never grant Admin privileges based only on an email submitted from the frontend.
+- Never allow public registration to claim the primary Admin identity.
+- Ensure that the account receives its existing Admin dashboard and permissions.
+
+5. COMPLETE THE WORK BEFORE DECLARING SUCCESS
+
+Do not stop after creating login screens.
+
+Complete and verify:
+
+- Frontend login.
+- Email verification interface.
+- Real OTP delivery.
+- Backend authentication.
+- Database integration.
+- Primary Admin initialization.
+- Automatic ordinary User registration.
+- Session creation and restoration.
+- Secure logout.
+- Existing role-based dashboard redirection.
+- Protected routes and API endpoints.
+- Error handling.
+- Production build and relevant tests.
+
+6. FINAL ACCEPTANCE CONDITION
+
+The implementation is only complete when I can open the application, enter my email, receive a real verification code, copy and paste that code, and successfully enter my existing dashboard.
+
+I should not need to perform any technical configuration or setup.
+
+Do not return a list of technical instructions for me to complete as a substitute for implementation. Complete everything within your available capabilities and clearly identify only an unavoidable external authorization or credential that you genuinely cannot obtain yourself.
