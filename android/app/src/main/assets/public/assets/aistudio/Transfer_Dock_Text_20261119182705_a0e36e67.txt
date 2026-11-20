@@ -1,0 +1,83 @@
+PHASE 04 — PIXEL-PERFECT SCREEN REPLICATION
+
+Act as an expert frontend/mobile UI engineer.
+
+Rebuild the original Aqar application interface screen by screen using the approved design system.
+
+1. Implementation order
+
+Implement the screens in this order:
+
+1. Listings Map.
+2. Listings List.
+3. Filters / New Order.
+4. Buying Requests.
+5. Real Estate Projects.
+6. Bookings.
+7. Profile.
+8. Update Profile.
+9. Services.
+10. Ejar Contracts.
+11. Login / Country Code.
+12. Chat.
+13. Residential Statistics.
+
+2. Visual replication requirements
+
+For each screen reproduce:
+
+- Overall layout.
+- Header.
+- Navigation.
+- Typography.
+- Colors.
+- Icons.
+- Images.
+- Cards.
+- Buttons.
+- Inputs.
+- Spacing.
+- Borders.
+- Shadows.
+- Corner radius.
+- Component positioning.
+
+Match the original reference as closely as technically possible.
+
+Do not redesign the application or introduce a different visual style.
+
+3. Reusable components
+
+Use shared components and design tokens.
+
+Avoid:
+
+- Duplicated UI code.
+- Inconsistent spacing.
+- Different button styles across modules.
+- Random colors.
+- Inconsistent icon sizes.
+
+4. Important requirements
+
+- Reproduce the original mobile-first appearance.
+- Preserve Arabic and English layout support.
+- Ensure scrolling works correctly.
+- Handle keyboard and safe areas.
+- Keep navigation visually consistent.
+- Use genuine assets where supplied.
+- Do not substitute unrelated stock imagery for reference images.
+
+5. Validation
+
+Compare each implemented screen against its corresponding reference screenshot.
+
+Record visual differences and correct them.
+
+Do not claim pixel-perfect completion without screenshot comparison.
+
+6. Deliverables
+
+Complete all 13 screen implementations, reusable components and a visual comparison report.
+
+Do not proceed to backend or business logic until the screen implementation has been reviewed.

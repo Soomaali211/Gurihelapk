@@ -1,52 +1,151 @@
 export type ListingPurpose = 'rent' | 'sale' | 'booking';
 export type PropertyType = 'villa' | 'apartment' | 'land' | 'commercial' | 'building';
 export type ListingStatus = 'live' | 'pending' | 'rejected' | 'sold';
-export type UserRole = 'seeker' | 'owner' | 'broker' | 'developer' | 'admin';
-export type AdminSubRole = 'super' | 'moderator' | 'finance' | 'support';
+export type UserRole = 'user' | 'admin' | 'super_admin';
+export type AccountStatus = 'active' | 'blocked';
 
-export interface AdminRecord {
-  uid: string;
-  email: string;
-  subRole: AdminSubRole;
-  status: 'active' | 'suspended';
-  mfaEnabled: boolean;
-  totpSecretEnc?: string;
-  recoveryCodeHashes?: string[];
-  sessionEpoch: number;
-  createdAt: string;
-  updatedAt: string;
+export function isAdminRole(role?: string | null): boolean {
+  return role === 'admin' || role === 'super_admin';
 }
 
-export interface AdminDevice {
+export interface AuthUser {
   id: string;
-  adminUid: string;
-  fingerprint: string;
-  label: string;
-  trusted: boolean;
-  approvedBy: string;
-  lastSeenAt: string;
+  username: string;
+  email: string;
+  phoneE164: string;
+  role: UserRole;
+  isPrimaryAdmin: boolean;
+  emailVerified?: boolean;
+  fullName: string;
+  city: string;
+  language: 'SO' | 'EN' | 'AR';
+  profileCompleted: boolean;
+  status: AccountStatus;
   createdAt: string;
   updatedAt: string;
+  lastLoginAt: string | null;
+}
+
+export interface AuthBootstrapStatus {
+  primaryAdminInitialized: boolean;
+  primaryAdminEmail: string;
+  setupTokenRequired: boolean;
+}
+
+export interface PasswordResetRequestItem {
+  id: string;
+  userId: string;
+  username: string;
+  email: string;
+  fullName: string;
+  status: 'pending' | 'issued' | 'completed' | 'rejected';
+  expiresAt: string;
+  requestedIp: string;
+  handledByAdminId: string;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+  completedAt: string | null;
+}
+
+export type WatermarkPosition =
+  | 'bottom-right'
+  | 'bottom-left'
+  | 'top-right'
+  | 'top-left'
+  | 'center';
+
+export type WatermarkVariant = 'primary' | 'mark';
+
+export interface WatermarkSettings {
+  enabled: boolean;
+  position: WatermarkPosition;
+  opacity: number;
+  variant: WatermarkVariant;
+  scalePercent: number;
+}
+
+export interface SystemSettings {
+  watermark: WatermarkSettings;
+  platformName: string;
+  supportPhone: string;
+  defaultCity: string;
+  requireListingModeration: boolean;
+}
+
+export interface MediaAssetItem {
+  id: string;
+  url: string;
+  originalUrl: string;
+  uploadedByUserId: string;
+  mimeType: string;
+  width: number;
+  height: number;
+  watermarked: boolean;
+  watermarkPosition: WatermarkPosition;
+  watermarkOpacity: number;
+  watermarkVariant: WatermarkVariant;
+  createdAt: string;
 }
 
 export interface AuditLogEntry {
   id: string;
-  actorUid: string;
-  actorEmail: string;
-  subRole: AdminSubRole;
+  actorUserId: string;
+  actorUsername: string;
+  actorPhone: string;
+  actorRole: UserRole;
   action: string;
   target: string;
   details: string;
-  deviceLabel: string;
-  stepUpUsed: boolean;
+  ipAddress: string;
   createdAt: string;
 }
 
-export interface AdminSessionState {
-  token: string;
-  expiresAt: number;
-  stepUpUntil: number;
-  sessionEpoch: number;
+export interface AdminSessionRecord {
+  id: string;
+  userId: string;
+  username: string;
+  phoneE164: string;
+  role: UserRole;
+  deviceLabel: string;
+  ipAddress: string;
+  rememberMe: boolean;
+  expiresAt: string;
+  revokedAt: string | null;
+  createdAt: string;
+  lastSeenAt: string;
+}
+
+export interface AdminOverview {
+  usersTotal: number;
+  usersCompleted: number;
+  listingsTotal: number;
+  listingsLive: number;
+  listingsPending: number;
+  listingsRejected: number;
+  projectsTotal: number;
+  bookingsTotal: number;
+  bookingsRevenue: number;
+  requestsOpen: number;
+  leasesTotal: number;
+  mediaTotal: number;
+  activeSessionsCount: number;
+  pendingResetsCount: number;
+  primaryAdminEmail: string;
+  settings: SystemSettings;
+}
+
+export interface AdminReports {
+  byDistrict: Array<{ district: string; count: number; avgPrice: number }>;
+  byPurpose: Array<{ purpose: string; count: number; totalValue: number }>;
+  byType: Array<{ propertyType: string; count: number }>;
+  byStatus: Array<{ status: string; count: number }>;
+  districtBenchmarks: Array<{
+    district: string;
+    avgRentM2: number;
+    avgSaleM2: number;
+    growth: string;
+  }>;
 }
 
 export interface BrokerInfo {
@@ -65,6 +164,7 @@ export interface BrokerInfo {
 
 export interface Listing {
   id: string;
+  ownerUid?: string;
   title: string;
   description: string;
   purpose: ListingPurpose;
@@ -125,6 +225,7 @@ export interface Project {
 
 export interface BookingReservation {
   id: string;
+  userId?: string;
   listingId: string;
   listingTitle: string;
   district: string;

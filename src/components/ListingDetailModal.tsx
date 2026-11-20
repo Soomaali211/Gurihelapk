@@ -10,6 +10,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { Listing } from '../types';
+import { resolveApiUrl } from '../lib/apiClient';
 
 interface ListingDetailModalProps {
   listing: Listing | null;
@@ -24,6 +25,7 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
   listing,
   onClose,
   onOpenChat,
+  onBookNow,
   isFavorite,
   onToggleFavorite,
 }) => {
@@ -88,11 +90,13 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
 
   const handleShare = () => {
     if (navigator.share) {
-      navigator.share({
-        title: listing.title,
-        text: `${listing.title} - $${listing.price.toLocaleString()} ee Hargeysa`,
-        url: window.location.href,
-      }).catch(() => {});
+      navigator
+        .share({
+          title: listing.title,
+          text: `${listing.title} - $${listing.price.toLocaleString()} (${listing.district})`,
+          url: window.location.href,
+        })
+        .catch(() => {});
     } else {
       navigator.clipboard?.writeText(window.location.href).catch(() => {});
       setCopiedLink(true);
@@ -100,21 +104,29 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
     }
   };
 
-  const openWhatsApp = () => {
-    const text = encodeURIComponent(
-      `Asc ${listing.broker.name}, waxaan ka helay gurigan GuriHel: "${listing.title}" ($${listing.price.toLocaleString()}) ee ${listing.district}. Fadlan wax badan iiga sheeg.`
-    );
-    window.open(`https://wa.me/${listing.broker.whatsapp}?text=${text}`, '_blank');
-  };
+  const activeImg = listing.images[activeImageIndex] || listing.images[0];
+  const resolvedImg = activeImg
+    ? resolveApiUrl(activeImg)
+    : '/assets/aistudio/GuriHel-app-icon-512-square_b480890b.png';
+  const brokerAvatar = listing.broker?.avatar
+    ? resolveApiUrl(listing.broker.avatar)
+    : '/assets/aistudio/GuriHel-app-icon-rounded_1e742137.png';
+
+  const whatsappText = encodeURIComponent(
+    `Asc ${listing.broker?.name || 'GuriHel'}, waxaan ka helay gurigan GuriHel: "${listing.title}" ($${listing.price.toLocaleString()}) ee ${listing.district}.`
+  );
+  const whatsappNumber = (listing.broker?.whatsapp || '252636786709').replace(/^\+/, '');
+  const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${whatsappText}`;
 
   return (
     <div className="fixed inset-0 z-[500] bg-black/70 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-y-auto font-sans select-none">
-      <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden border border-[#C9D2CD] my-auto animate-in zoom-in-95 duration-200 flex flex-col max-h-[92dvh]">
+      <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden border border-[#C9D2CD] my-auto flex flex-col max-h-[92dvh]">
         {/* Top Bar */}
-        <div className="px-3.5 sm:px-4 py-2.5 sm:py-3 bg-white border-b border-slate-100 flex items-center justify-between sticky top-0 z-10">
+        <div className="px-3.5 sm:px-4 py-2.5 bg-white border-b border-slate-100 flex items-center justify-between sticky top-0 z-10">
           <button
+            type="button"
             onClick={onClose}
-            className="p-1.5 hover:bg-slate-100 rounded-full text-slate-700 transition-colors"
+            className="p-1.5 hover:bg-slate-100 rounded-full text-slate-700"
             title="Back"
           >
             <ArrowLeft className="w-5 h-5" />
@@ -123,10 +135,11 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
           <div className="flex items-center gap-1.5">
             {copiedLink && (
               <span className="text-[11px] font-bold text-[#0B7A3E] bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full">
-                Link copied!
+                Link copied
               </span>
             )}
             <button
+              type="button"
               onClick={(e) => onToggleFavorite(listing.id, e)}
               className={`p-2 rounded-full transition-colors ${
                 isFavorite ? 'text-red-500 bg-red-50' : 'text-slate-600 hover:bg-slate-100'
@@ -136,6 +149,7 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
               <Heart className={`w-5 h-5 ${isFavorite ? 'fill-current' : ''}`} />
             </button>
             <button
+              type="button"
               onClick={handleShare}
               className="p-2 text-slate-600 hover:bg-slate-100 rounded-full transition-colors"
               title="Share"
@@ -145,20 +159,16 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
           </div>
         </div>
 
-        {/* Scrollable Body */}
+        {/* Body */}
         <div className="overflow-y-auto flex-1">
-          {/* Gallery Slider */}
           <div className="relative aspect-16/10 w-full bg-slate-900 overflow-hidden">
-            <img
-              src={listing.images[activeImageIndex] || listing.images[0]}
-              alt={listing.title}
-              className="w-full h-full object-cover"
-            />
+            <img src={resolvedImg} alt={listing.title} className="w-full h-full object-cover" />
             {listing.images.length > 1 && (
               <div className="absolute bottom-2.5 left-1/2 -translate-x-1/2 flex items-center gap-1.5 bg-black/40 backdrop-blur-xs px-2.5 py-1 rounded-full">
                 {listing.images.map((_, i) => (
                   <button
                     key={i}
+                    type="button"
                     onClick={() => setActiveImageIndex(i)}
                     className={`w-1.5 h-1.5 rounded-full transition-all ${
                       activeImageIndex === i ? 'w-4 bg-white' : 'bg-white/50'
@@ -169,17 +179,18 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
             )}
           </div>
 
-          <div className="p-3.5 sm:p-4 space-y-4">
-            {/* Price & Verified Badge */}
+          <div className="p-4 space-y-4">
             <div>
               <div className="flex items-center justify-between gap-2">
                 <div className="text-lg sm:text-2xl font-black text-[#0B7A3E] tabular-nums truncate">
                   ${listing.price.toLocaleString()} USD
                 </div>
-                <div className="bg-[#0B7A3E] text-white text-[11px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 shrink-0">
-                  <Check className="w-3 h-3 stroke-3" />
-                  <span>Verified</span>
-                </div>
+                {listing.verified && (
+                  <div className="bg-[#0B7A3E] text-white text-[11px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 shrink-0">
+                    <Check className="w-3 h-3 stroke-3" />
+                    <span>Verified</span>
+                  </div>
+                )}
               </div>
 
               <div className="text-xs font-bold text-slate-500 mt-1">
@@ -187,84 +198,88 @@ export const ListingDetailModal: React.FC<ListingDetailModalProps> = ({
               </div>
             </div>
 
-            {/* Specs Grid (Responsive on 360px) */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
               <div className="bg-[#EEF2F0] p-2 rounded-xl min-w-0">
                 <div className="text-xs font-bold text-[#0F3D2A] truncate">{listing.area_m2} m²</div>
               </div>
               <div className="bg-[#EEF2F0] p-2 rounded-xl min-w-0">
-                <div className="text-xs font-bold text-[#0F3D2A] truncate">{listing.bedrooms || 4} bed</div>
+                <div className="text-xs font-bold text-[#0F3D2A] truncate">{listing.bedrooms ?? 0} bed</div>
               </div>
               <div className="bg-[#EEF2F0] p-2 rounded-xl min-w-0">
-                <div className="text-xs font-bold text-[#0F3D2A] truncate">{listing.bathrooms || 3} bath</div>
+                <div className="text-xs font-bold text-[#0F3D2A] truncate">{listing.bathrooms ?? 0} bath</div>
               </div>
               <div className="bg-[#EEF2F0] p-2 rounded-xl min-w-0">
-                <div className="text-xs font-bold text-[#0F3D2A] truncate">2 floors</div>
+                <div className="text-xs font-bold text-[#0F3D2A] truncate">{listing.living_rooms ?? 1} living</div>
               </div>
             </div>
 
-            {/* Description */}
             <div>
-              <h4 className="text-xs font-extrabold text-slate-900 mb-1">
-                Description
-              </h4>
-              <p className="text-xs text-slate-600 leading-relaxed">
-                {listing.description}
-              </p>
+              <h4 className="text-xs font-extrabold text-slate-900 mb-1">Description</h4>
+              <p className="text-xs text-slate-600 leading-relaxed">{listing.description}</p>
             </div>
 
-            {/* Real OpenStreetMap Mini Map + Nearby */}
             <div>
               <div className="relative h-32 w-full bg-slate-100 rounded-2xl overflow-hidden border border-[#C9D2CD]">
                 <div ref={miniMapRef} className="w-full h-full" />
               </div>
-              <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-slate-500 font-semibold mt-1.5 px-1">
-                <span className="flex items-center gap-1">🏫 Dugsi: 350m</span>
-                <span className="flex items-center gap-1">🕌 Masaajid: 150m</span>
-                <span className="flex items-center gap-1">🛒 Suuqa: 500m</span>
-              </div>
             </div>
 
-            {/* Broker Card */}
+            {/* Publisher Card (real metadata only) */}
             <div className="bg-slate-50 p-3 rounded-2xl border border-[#C9D2CD] flex items-center justify-between gap-2.5">
               <div className="flex items-center gap-2.5 min-w-0">
                 <img
-                  src={listing.broker.avatar}
-                  alt={listing.broker.name}
+                  src={brokerAvatar}
+                  alt={listing.broker?.name || 'GuriHel'}
                   className="w-10 h-10 rounded-full object-cover border border-[#0B7A3E] shrink-0"
                 />
                 <div className="min-w-0">
                   <div className="flex items-center gap-1">
-                    <h5 className="text-xs font-bold text-slate-900 truncate">{listing.broker.name}</h5>
+                    <h5 className="text-xs font-bold text-slate-900 truncate">
+                      {listing.broker?.name || 'GuriHel Verified Publisher'}
+                    </h5>
                     <ShieldCheck className="w-3.5 h-3.5 text-[#0B7A3E] shrink-0" />
                   </div>
                   <div className="text-[10px] text-slate-500 truncate">
-                    Shati: {listing.broker.license} · <span className="font-bold text-[#0B7A3E]">24 listings</span>
+                    {listing.broker?.agency || 'GuriHel Marketplace'} · {listing.broker?.phone}
                   </div>
                 </div>
               </div>
-
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-emerald-200 shrink-0" title="Online"></span>
             </div>
           </div>
         </div>
 
-        {/* Sticky Bottom CTAs */}
-        <div className="p-3 bg-white border-t border-[#C9D2CD] grid grid-cols-2 gap-2 sticky bottom-0 safe-bottom">
+        {/* Bottom CTAs */}
+        <div
+          className={`p-3 bg-white border-t border-[#C9D2CD] grid gap-2 sticky bottom-0 safe-bottom ${
+            listing.purpose === 'booking' ? 'grid-cols-3' : 'grid-cols-2'
+          }`}
+        >
           <button
+            type="button"
             onClick={() => onOpenChat(listing)}
-            className="py-2.5 bg-[#0B7A3E] hover:bg-[#0F3D2A] text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition-all"
+            className="py-2.5 bg-[#0B7A3E] hover:bg-[#0F3D2A] text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5"
           >
             <MessageSquare className="w-4 h-4 shrink-0" />
             <span className="truncate">Chat</span>
           </button>
-          <button
-            onClick={openWhatsApp}
-            className="py-2.5 bg-[#EEF2F0] hover:bg-slate-200 text-[#0F3D2A] text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 border border-[#C9D2CD] active:scale-95 transition-all"
+          {listing.purpose === 'booking' && (
+            <button
+              type="button"
+              onClick={() => onBookNow(listing)}
+              className="py-2.5 bg-[#0095D9] hover:bg-sky-600 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5"
+            >
+              <span className="truncate">Book Now</span>
+            </button>
+          )}
+          <a
+            href={whatsappUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="py-2.5 bg-[#EEF2F0] hover:bg-slate-200 text-[#0F3D2A] text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 border border-[#C9D2CD]"
           >
             <Phone className="w-4 h-4 text-[#0B7A3E] shrink-0" />
-            <span className="truncate">Call / WhatsApp</span>
-          </button>
+            <span className="truncate">WhatsApp</span>
+          </a>
         </div>
       </div>
     </div>

@@ -1,6 +1,7 @@
 import React from 'react';
 import { MapPin, Check, Heart, Bed, Bath, Maximize2, Sparkles } from 'lucide-react';
 import { Listing } from '../types';
+import { resolveApiUrl } from '../lib/apiClient';
 
 interface ListingCardProps {
   listing: Listing;
@@ -15,17 +16,20 @@ export const ListingCard: React.FC<ListingCardProps> = ({
   isFavorite,
   onToggleFavorite,
 }) => {
+  const imageSrc = listing.images[0]
+    ? resolveApiUrl(listing.images[0])
+    : '/assets/aistudio/GuriHel-app-icon-512-square_b480890b.png';
+
   return (
     <div
       onClick={() => onSelect(listing)}
       className="bg-white rounded-2xl border border-[#C9D2CD] hover:border-[#0B7A3E] overflow-hidden shadow-xs hover:shadow-md transition-all cursor-pointer group flex flex-col"
     >
-      {/* Image container */}
+      {/* Image container (server already applies single configurable GuriHel logo watermark) */}
       <div className="relative aspect-16/10 w-full overflow-hidden bg-slate-100">
         <img
-          src={listing.images[0]}
+          src={imageSrc}
           alt={listing.title}
-          referrerPolicy="no-referrer"
           className="w-full h-full object-cover group-hover:scale-103 transition-transform duration-300"
         />
 
@@ -44,19 +48,20 @@ export const ListingCard: React.FC<ListingCardProps> = ({
             </span>
           )}
           <span className="bg-black/60 backdrop-blur-xs text-white text-[10px] font-medium px-2 py-0.5 rounded-md capitalize">
-            {listing.purpose === 'rent' ? 'Kiro' : listing.purpose === 'sale' ? 'Iib' : 'Ballan'}
+            {listing.purpose === 'rent' ? 'Rent' : listing.purpose === 'sale' ? 'Sale' : 'Booking'}
           </span>
         </div>
 
         {/* Favorite Button */}
         <button
+          type="button"
           onClick={(e) => onToggleFavorite(listing.id, e)}
           className={`absolute top-2.5 right-2.5 p-1.5 rounded-full backdrop-blur-md transition-colors ${
             isFavorite
               ? 'bg-red-500 text-white'
-              : 'bg-white/80 text-slate-700 hover:bg-white'
+              : 'bg-white/85 text-slate-700 hover:bg-white'
           }`}
-          title="Kaydi gurigan"
+          title="Save property"
         >
           <Heart className={`w-3.5 h-3.5 ${isFavorite ? 'fill-current' : ''}`} />
         </button>
@@ -65,13 +70,12 @@ export const ListingCard: React.FC<ListingCardProps> = ({
         <div className="absolute bottom-2.5 left-2.5 bg-black/75 backdrop-blur-xs text-white px-2.5 py-1 rounded-xl text-sm font-extrabold tabular-nums flex items-baseline gap-1">
           <span>${listing.price.toLocaleString()}</span>
           <span className="text-[10px] font-normal text-slate-300">
-            {listing.price_unit === 'month' ? '/bil' : listing.price_unit === 'night' ? '/habeen' : ''}
+            {listing.price_unit === 'month'
+              ? '/mo'
+              : listing.price_unit === 'night'
+              ? '/night'
+              : ''}
           </span>
-        </div>
-
-        {/* Subtle Watermark Badge (35% opacity) */}
-        <div className="absolute bottom-2.5 right-2.5 bg-black/40 backdrop-blur-2xs text-white/90 px-2 py-0.5 rounded-md text-[9px] font-extrabold tracking-wider uppercase pointer-events-none flex items-center gap-1 shadow-xs z-10">
-          <span>🏠 GuriHel</span>
         </div>
       </div>
 
@@ -80,16 +84,16 @@ export const ListingCard: React.FC<ListingCardProps> = ({
         <div>
           <div className="flex items-center gap-1 text-[11px] font-semibold text-[#0B7A3E]">
             <MapPin className="w-3 h-3 shrink-0" />
-            <span className="truncate">{listing.district}, {listing.city}</span>
+            <span className="truncate">
+              {listing.district}, {listing.city}
+            </span>
           </div>
 
           <h3 className="text-sm font-bold text-[#0F3D2A] mt-1 line-clamp-1 group-hover:text-[#0B7A3E] transition-colors">
             {listing.title}
           </h3>
 
-          <p className="text-xs text-slate-500 mt-1 line-clamp-2">
-            {listing.description}
-          </p>
+          <p className="text-xs text-slate-500 mt-1 line-clamp-2">{listing.description}</p>
         </div>
 
         {/* Specs footer */}
@@ -98,13 +102,13 @@ export const ListingCard: React.FC<ListingCardProps> = ({
             {listing.bedrooms > 0 && (
               <span className="flex items-center gap-1 whitespace-nowrap">
                 <Bed className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                <span>{listing.bedrooms} qol</span>
+                <span>{listing.bedrooms} bed</span>
               </span>
             )}
             {listing.bathrooms > 0 && (
               <span className="flex items-center gap-1 whitespace-nowrap">
                 <Bath className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                <span>{listing.bathrooms} musqul</span>
+                <span>{listing.bathrooms} bath</span>
               </span>
             )}
             <span className="flex items-center gap-1 whitespace-nowrap">

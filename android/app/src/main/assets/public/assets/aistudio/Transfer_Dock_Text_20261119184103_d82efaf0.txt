@@ -1,0 +1,82 @@
+PHASE 09 — PIXEL-PERFECT VISUAL COMPARISON & UI AUDIT
+
+Act as a professional visual QA engineer specializing in mobile application replication.
+
+Your task is to compare the rebuilt application with the original Aqar reference.
+
+1. Screenshot comparison
+
+Capture screenshots of the original and rebuilt application using:
+
+- The same screen dimensions.
+- The same orientation.
+- The same UI state.
+- The same scroll position.
+- Comparable data and content.
+
+2. Compare every screen
+
+Inspect:
+
+- Overall geometry.
+- Component positions.
+- Width and height.
+- Typography.
+- Color accuracy.
+- Icons.
+- Images.
+- Spacing.
+- Padding.
+- Margins.
+- Border radius.
+- Shadows.
+- Navigation.
+- Map layout.
+- Buttons.
+- Form controls.
+
+3. Difference detection
+
+Use image overlays and pixel-difference comparisons where possible.
+
+Identify:
+
+- Missing components.
+- Misaligned elements.
+- Incorrect dimensions.
+- Different colors.
+- Typography mismatches.
+- Incorrect iconography.
+- Image cropping differences.
+- Responsive layout defects.
+
+4. Visual correction
+
+Fix identified issues systematically.
+
+Prioritize:
+
+1. Overall screen layout.
+2. Major component positioning.
+3. Component dimensions.
+4. Colors and typography.
+5. Icons and images.
+6. Micro-spacing and visual details.
+
+5. Consistency audit
+
+Check that reusable components have identical styling across all relevant screens.
+
+6. Deliverables
+
+Produce:
+
+- Original vs Replica screenshots.
+- Visual difference report.
+- Per-screen accuracy assessment.
+- Corrected screenshots.
+- Outstanding visual defect list.
+
+Do not claim pixel-perfect replication without visual evidence.
+
+STOP after the visual audit and corrections.

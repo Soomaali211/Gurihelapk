@@ -1,102 +1,68 @@
-import {
-  Listing,
-  ChatThread,
-  SearchRequest,
-  LeaseContract,
-  UserRole,
-} from '../types';
-
 export const APP_VERSION: string =
   (typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : null) || '4.0.3';
 export const APP_BUILD: string =
   (typeof __APP_BUILD__ !== 'undefined' ? __APP_BUILD__ : null) || '401';
 
-const STORAGE_KEY = 'gurihel_app_state_v1';
-const SCHEMA_VERSION = 1;
+const STORAGE_KEY = 'gurihel_preferences_v2';
 
-export interface PersistedAppState {
-  schemaVersion: number;
+export interface AppPreferences {
   lastAppVersion: string;
   lastBuild: string;
-  userRole: UserRole;
-  favorites: string[];
-  customListings: Listing[];
-  chatThreads: ChatThread[] | null;
-  searchRequests: SearchRequest[] | null;
-  leaseContracts: LeaseContract[] | null;
   githubOwner: string;
-  updatedAt: string;
+  language: 'SO' | 'EN' | 'AR';
 }
 
-const DEFAULT_STATE: PersistedAppState = {
-  schemaVersion: SCHEMA_VERSION,
+const DEFAULT_PREFS: AppPreferences = {
   lastAppVersion: APP_VERSION,
   lastBuild: APP_BUILD,
-  userRole: 'seeker',
-  favorites: ['A1042', 'wf-65k'],
-  customListings: [],
-  chatThreads: null,
-  searchRequests: null,
-  leaseContracts: null,
   githubOwner: '',
-  updatedAt: new Date().toISOString(),
+  language: 'SO',
 };
 
 export function loadPersistedState(): {
-  state: PersistedAppState;
+  state: AppPreferences;
   upgradedFromVersion: string | null;
 } {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) {
-      const initial = { ...DEFAULT_STATE };
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(initial));
-      return { state: initial, upgradedFromVersion: null };
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_PREFS));
+      return { state: { ...DEFAULT_PREFS }, upgradedFromVersion: null };
     }
-
-    const parsed = JSON.parse(raw) as Partial<PersistedAppState>;
+    const parsed = JSON.parse(raw) as Partial<AppPreferences>;
     const previousVersion = parsed.lastAppVersion || null;
     const upgraded =
       previousVersion && previousVersion !== APP_VERSION ? previousVersion : null;
 
-    // Non-destructive additive migration preserving all user data across APK updates
-    const migrated: PersistedAppState = {
-      schemaVersion: SCHEMA_VERSION,
+    const next: AppPreferences = {
       lastAppVersion: APP_VERSION,
       lastBuild: APP_BUILD,
-      userRole: parsed.userRole || 'seeker',
-      favorites: Array.isArray(parsed.favorites) ? parsed.favorites : DEFAULT_STATE.favorites,
-      customListings: Array.isArray(parsed.customListings) ? parsed.customListings : [],
-      chatThreads: Array.isArray(parsed.chatThreads) ? parsed.chatThreads : null,
-      searchRequests: Array.isArray(parsed.searchRequests) ? parsed.searchRequests : null,
-      leaseContracts: Array.isArray(parsed.leaseContracts) ? parsed.leaseContracts : null,
       githubOwner: typeof parsed.githubOwner === 'string' ? parsed.githubOwner : '',
-      updatedAt: new Date().toISOString(),
+      language:
+        parsed.language === 'EN' || parsed.language === 'AR' || parsed.language === 'SO'
+          ? parsed.language
+          : 'SO',
     };
-
-    if (upgraded || parsed.schemaVersion !== SCHEMA_VERSION) {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
+    if (upgraded) {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
     }
-
-    return { state: migrated, upgradedFromVersion: upgraded };
+    return { state: next, upgradedFromVersion: upgraded };
   } catch {
-    return { state: { ...DEFAULT_STATE }, upgradedFromVersion: null };
+    return { state: { ...DEFAULT_PREFS }, upgradedFromVersion: null };
   }
 }
 
-export function savePersistedPatch(patch: Partial<PersistedAppState>): void {
+export function savePersistedPatch(patch: Partial<AppPreferences>): void {
   try {
     const { state } = loadPersistedState();
-    const next: PersistedAppState = {
+    const next: AppPreferences = {
       ...state,
       ...patch,
-      schemaVersion: SCHEMA_VERSION,
       lastAppVersion: APP_VERSION,
       lastBuild: APP_BUILD,
-      updatedAt: new Date().toISOString(),
     };
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   } catch {
-    // Ignore storage quota errors gracefully
+    // Ignore storage quota errors cleanly
   }
 }

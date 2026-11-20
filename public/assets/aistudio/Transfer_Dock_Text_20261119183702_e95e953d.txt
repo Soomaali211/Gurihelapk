@@ -1,0 +1,98 @@
+PHASE 07 — BACKEND & DATA ARCHITECTURE
+
+Act as a senior backend architect and database engineer.
+
+Design and implement the backend required to support the replicated application.
+
+1. Architecture assessment
+
+Inspect the existing backend before creating new infrastructure.
+
+Preserve existing working services and integrations where appropriate.
+
+2. Data models
+
+Identify and design appropriate data structures for:
+
+- Users.
+- User profiles.
+- Properties.
+- Property images.
+- Property categories.
+- Property locations.
+- Property features.
+- Buying requests.
+- Search filters.
+- Developers.
+- Projects.
+- Bookings.
+- Services.
+- Subscriptions.
+- Contracts.
+- Chats.
+- Messages.
+- Residential statistics.
+- Notifications.
+
+3. API architecture
+
+Define APIs for:
+
+- Authentication.
+- Listings.
+- Search and filtering.
+- Map queries.
+- Property details.
+- Buying requests.
+- Projects.
+- Bookings.
+- Profile management.
+- Services.
+- Contracts.
+- Chat.
+- Statistics.
+
+4. Security
+
+Implement:
+
+- Authentication.
+- Authorization.
+- Input validation.
+- Secure session management.
+- Data access restrictions.
+- Rate limiting where appropriate.
+- Secure handling of personal information.
+
+5. Data integrity
+
+Ensure:
+
+- Consistent IDs.
+- Valid relationships.
+- No duplicate records.
+- Reliable updates.
+- Proper error handling.
+- Database transactions where necessary.
+
+6. External services
+
+Identify integrations that require third-party APIs.
+
+Do not fabricate API responses or pretend that an integration is connected when it is not.
+
+Use clearly labeled mock services only during development.
+
+7. Deliverables
+
+Provide:
+
+1. Database schema.
+2. API documentation.
+3. Authentication architecture.
+4. Security specification.
+5. Data relationship diagram.
+6. Backend implementation.
+7. Integration status report.
+
+STOP for backend review before proceeding to Phase 08.

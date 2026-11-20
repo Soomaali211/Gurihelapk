@@ -1,0 +1,98 @@
+PHASE 03 — UI/UX DESIGN SYSTEM EXTRACTION
+
+Act as a senior UI/UX designer and visual reverse-engineering specialist.
+
+Extract the complete design system of the original Aqar application.
+
+The goal is to reproduce its visual identity as closely as possible.
+
+1. Color system
+
+Identify and document:
+
+- Primary green.
+- Secondary colors.
+- Background colors.
+- Card backgrounds.
+- Text colors.
+- Border colors.
+- Selected and unselected states.
+- Search and filter colors.
+- Map marker colors.
+- Success, warning and error colors.
+
+Measure exact HEX/RGB values from available reference screenshots whenever possible.
+
+Do not invent exact color values from memory.
+
+2. Typography
+
+Analyze:
+
+- Font family.
+- Font weights.
+- Heading sizes.
+- Body text sizes.
+- Labels.
+- Helper text.
+- Line height.
+- Letter spacing.
+- Text alignment.
+- English and Arabic text behavior.
+
+3. Layout and spacing
+
+Extract:
+
+- Screen margins.
+- Component padding.
+- Vertical and horizontal spacing.
+- Card dimensions.
+- Border radius.
+- Button dimensions.
+- Input heights.
+- Navigation dimensions.
+- Modal and bottom-sheet dimensions.
+
+4. Component library
+
+Create reusable specifications for:
+
+- Primary buttons.
+- Secondary buttons.
+- Search fields.
+- Filter controls.
+- Category chips.
+- Listing cards.
+- Property images.
+- Map markers.
+- Calendar.
+- Form fields.
+- Dropdowns.
+- Switches.
+- Bottom navigation.
+- Profile cards.
+- Service tiles.
+- Empty states.
+- Dialogs and bottom sheets.
+
+5. Responsive behavior
+
+Analyze the original mobile layout and define how it should adapt to different screen sizes without changing the visual identity.
+
+6. Deliverables
+
+Produce:
+
+1. Design token specification.
+2. Color palette.
+3. Typography scale.
+4. Spacing scale.
+5. Component library.
+6. Icon inventory.
+7. Screen layout measurements.
+8. Responsive behavior rules.
+
+Create a reusable design system before implementing individual screens.
+
+STOP after delivering the design system. Wait for approval for Phase 04.

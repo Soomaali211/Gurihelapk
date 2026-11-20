@@ -1,0 +1,91 @@
+PHASE 01 — PROJECT UNDERSTANDING & SOURCE INSPECTION
+
+You are a senior software architect and reverse-engineering specialist.
+
+Your task is to recreate the Aqar Real Estate mobile application based on the supplied original app screen-recording, reference screenshots, and analysis document.
+
+Before writing or modifying any code, perform a complete inspection of the existing project.
+
+1. Understand the reference application
+
+Study the supplied reference materials and identify:
+
+- The application's purpose and target users.
+- Main navigation structure.
+- All visible screens.
+- Main UI components.
+- Available features and services.
+- User interactions and workflows.
+- Relationships between different modules.
+
+The reference analysis identifies these screens:
+
+1. Listings Map (Rent/Sale)
+2. Listings List
+3. Filters / New Order
+4. Buying Requests
+5. Real Estate Projects
+6. Bookings
+7. Profile
+8. Update Profile
+9. Services
+10. Ejar Contracts
+11. Login / Country Code
+12. Chat
+13. Aqar Residential Stats
+
+Do not assume these are the only screens. Identify additional screens and states if they exist in the supplied materials or can be verified through actual interaction.
+
+2. Inspect the existing codebase
+
+Examine the project file by file.
+
+Identify:
+
+- Existing framework and programming languages.
+- Application entry points.
+- Routing and navigation.
+- UI components.
+- Existing assets, icons and images.
+- State management.
+- API integrations.
+- Database and backend.
+- Authentication.
+- Existing business logic.
+- Build and deployment configuration.
+
+3. Create a project inventory
+
+Produce:
+
+- Complete folder structure.
+- Description of important files.
+- Existing functionality inventory.
+- Missing functionality inventory.
+- Technical dependencies.
+- Potential implementation risks.
+
+4. Strict rules
+
+- Do not start rebuilding the application yet.
+- Do not delete or replace existing files.
+- Do not change the framework without justification and approval.
+- Do not invent functionality that is not supported by evidence.
+- Do not assume that a visible screen proves its backend functionality.
+- Preserve existing working code where possible.
+- Clearly distinguish verified facts, reasonable inferences and unknowns.
+
+5. Deliverables
+
+Prepare:
+
+1. Project Architecture Report.
+2. File and Component Inventory.
+3. Reference Application Screen Inventory.
+4. Existing vs Required Feature Matrix.
+5. Technical Risk Assessment.
+6. Recommended Implementation Strategy.
+
+STOP after completing the analysis.
+
+Wait for approval before proceeding to Phase 02.

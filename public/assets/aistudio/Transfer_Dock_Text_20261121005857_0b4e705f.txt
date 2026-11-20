@@ -1,0 +1,309 @@
+MASTER PROMPT — BUILD AND INTEGRATE THE COMPLETE LOGIN SYSTEM
+
+You are working on an existing application. Your task is to implement and fully integrate a secure, production-ready authentication and login system into the existing project.
+
+1. IMPORTANT: UNDERSTAND THE EXISTING PROJECT FIRST
+
+Before making any changes:
+
+- Inspect the entire existing project structure.
+- Understand the current frontend, backend, database, API architecture, routing, and authentication-related code.
+- Identify the existing Admin and User dashboards and their current routes.
+- Identify how user roles and permissions are currently stored and managed.
+- Reuse the existing backend, database, architecture, and components wherever possible.
+- Do not create a separate application or an unnecessary parallel authentication system.
+- Do not rebuild, redesign, or change the existing Admin or User dashboards.
+- Do not modify existing Admin/User functionality, permissions, or business logic.
+
+The Admin and User roles, permissions, responsibilities, and dashboard functionality have already been designed. Your job is to connect the login system to that existing structure.
+
+2. LOGIN METHOD — EMAIL-FIRST PASSWORDLESS AUTHENTICATION
+
+Implement a passwordless email OTP login system.
+
+The login process must work as follows:
+
+STEP 1 — Email Login Page
+
+Create a clean, modern, professional login page.
+
+It must contain:
+
+- Application logo/name, using existing project assets.
+- A welcoming heading.
+- An email address input field.
+- A Continue button.
+- Appropriate email validation.
+- Clear loading and error states.
+
+The user enters their email address and presses Continue.
+
+Do not ask for a password.
+
+STEP 2 — Backend Account Identification
+
+When the user submits their email:
+
+- Send the email to the existing backend.
+- Check the database for the account.
+- Identify its existing role and account status.
+- Determine whether the account is an Admin, Super Admin, or ordinary User.
+- Check whether the account is active, blocked, or pending verification.
+
+Do not expose the user's role or account existence through public API responses.
+
+Use an appropriate generic response that does not reveal whether an email belongs to an Admin or ordinary User.
+
+STEP 3 — Send Email Verification Code
+
+Send a six-digit OTP verification code to the submitted email address.
+
+Requirements:
+
+- OTP must be generated securely on the backend.
+- OTP must expire after 5 minutes.
+- OTP must only be usable once.
+- Store a secure hash of the OTP in the database, not the plain code.
+- Resending a code must invalidate the previous code.
+- Add resend cooldown and rate limiting.
+- Limit incorrect verification attempts.
+- Prevent brute-force attacks.
+- Never expose OTP codes in frontend responses, logs, or production debugging output.
+
+Use the existing email infrastructure if available.
+
+If email delivery is not configured, integrate a suitable email delivery provider that fits the existing backend architecture. Keep credentials in environment variables and document the required configuration.
+
+Do not use fake OTPs, hardcoded verification codes, or simulated successful email delivery in production.
+
+STEP 4 — OTP Verification Page
+
+After the user submits their email, display a dedicated verification page.
+
+The page must include:
+
+- Six-digit OTP input.
+- Verify button.
+- Resend code option.
+- Countdown showing the OTP expiry time.
+- Change email option.
+- Loading, success, and error states.
+- Clear messages for expired or incorrect codes.
+
+The OTP input should support automatic progression between digits, paste of the complete six-digit code, and mobile-friendly keyboard behavior.
+
+STEP 5 — Verify OTP and Create Session
+
+When the user submits the OTP:
+
+The backend must:
+
+1. Validate the OTP against the stored hash.
+2. Check expiry.
+3. Check whether the OTP has already been used.
+4. Check the account status.
+5. Mark the OTP as consumed.
+6. Create an authenticated session only after successful verification.
+7. Return the authenticated user's identity and appropriate session credentials.
+
+Use secure access and refresh token handling compatible with the existing application.
+
+Where supported, implement refresh-token rotation, session revocation, logout, and expiration.
+
+Store credentials securely. For a mobile application, use the platform's secure storage mechanism rather than ordinary local storage.
+
+3. ADMIN AND USER REDIRECTION
+
+After successful OTP verification, retrieve the user's actual role from the backend/database.
+
+Redirect according to the existing role:
+
+- "super_admin" → Existing Super Admin dashboard.
+- "admin" → Existing Admin dashboard.
+- "user" → Existing User dashboard.
+
+IMPORTANT:
+
+Do not create new dashboards.
+
+Do not redesign the existing dashboards.
+
+Do not invent new Admin or User permissions.
+
+Use the existing routes and existing role-based functionality.
+
+If the application already uses a different role naming convention, preserve and correctly integrate that convention rather than introducing conflicting role names.
+
+4. PRIMARY ADMIN ACCOUNT
+
+The primary Admin email is:
+
+"ddhamaan@gmail.com"
+
+This account must be securely provisioned in the existing database as the primary "super_admin" account.
+
+Requirements:
+
+- Provision the primary Admin through a secure backend initialization or database seeding mechanism.
+- Make the operation idempotent so it cannot create duplicate accounts.
+- If the account already exists, reconcile it safely without overwriting unrelated account data.
+- Verify ownership of the email through the OTP process.
+- Never grant Admin privileges merely because someone enters this email address.
+- Never allow public registration to claim or elevate this account.
+- Do not trust a role supplied by the frontend.
+- Only trusted server-side provisioning or an authorized Super Admin can assign elevated roles.
+
+The primary Admin account must be protected from unauthorized demotion, deletion, or privilege changes.
+
+5. NEW USER REGISTRATION
+
+Keep ordinary User registration compatible with the existing application.
+
+If an email does not belong to an existing account:
+
+1. Allow the registration flow to continue.
+2. Send an OTP to verify email ownership.
+3. After successful OTP verification, collect the required registration details if they are needed by the existing application.
+4. Create the account with the ordinary "user" role only.
+5. Never allow public registration to select "admin" or "super_admin".
+6. Continue to the existing User dashboard.
+
+Do not create duplicate accounts for an already registered email.
+
+Do not change the existing user profile structure unnecessarily.
+
+6. SESSION AND AUTHENTICATION MANAGEMENT
+
+Implement the following features:
+
+- Persistent authenticated sessions where appropriate.
+- Automatic session restoration when the application is reopened.
+- Secure logout.
+- Session expiration.
+- Refresh-token handling where supported.
+- Reauthentication when a session expires.
+- Protection against unauthorized access to protected routes.
+- Correct handling of expired or revoked sessions.
+- Prevention of unauthenticated access to Admin and User dashboards.
+
+The backend must independently validate authentication and authorization for every protected API endpoint.
+
+Frontend route protection alone is not sufficient.
+
+7. LOGIN UI/UX REQUIREMENTS
+
+Design a modern, professional, clean, responsive login experience.
+
+The login interface must:
+
+- Match the existing application's visual identity.
+- Work properly on Android mobile, tablets, and desktop.
+- Use clear typography and appropriate spacing.
+- Have accessible form controls.
+- Provide clear validation and error messages.
+- Include smooth but subtle transitions.
+- Prevent repeated submissions while requests are processing.
+- Display meaningful loading indicators.
+- Avoid unnecessary screens and complicated navigation.
+
+Do not redesign the existing application. Only implement the login and verification interfaces and the necessary authentication-related states.
+
+8. DATABASE AND BACKEND INTEGRATION
+
+Inspect the existing database and backend before deciding what to add.
+
+Implement only the necessary changes, such as:
+
+- OTP verification records.
+- Authentication session records if needed.
+- Email verification status if not already available.
+- Secure token/session management.
+- Any required database migrations or indexes.
+
+Reuse existing account and role tables.
+
+Do not create duplicate user tables or conflicting role systems.
+
+All sensitive authentication operations must be performed server-side.
+
+9. SECURITY REQUIREMENTS
+
+Implement production-grade protections:
+
+- OTP hashing.
+- OTP expiration.
+- One-time OTP usage.
+- Rate limiting.
+- Resend cooldown.
+- Maximum verification attempts.
+- Secure session creation.
+- Secure token storage.
+- Server-side role validation.
+- Protection against account enumeration.
+- Protection against privilege escalation.
+- Protection against duplicate registration.
+- Input validation and sanitization.
+- Secure error handling.
+- Appropriate audit logging without recording OTPs or secrets.
+
+Never trust frontend-supplied role information.
+
+10. TESTING AND VERIFICATION
+
+After implementation, test the complete authentication flow.
+
+Test at least:
+
+1. Existing Admin enters their email.
+2. Admin receives the OTP.
+3. Admin verifies the OTP.
+4. Admin is redirected to the existing Admin dashboard.
+5. Primary Admin email is correctly recognized through the database role.
+6. Ordinary User enters their email.
+7. User receives and verifies the OTP.
+8. User is redirected to the existing User dashboard.
+9. New User registration works correctly.
+10. Invalid OTP is rejected.
+11. Expired OTP is rejected.
+12. Reused OTP is rejected.
+13. Resending OTP invalidates the previous code.
+14. Blocked accounts cannot log in.
+15. Unauthenticated users cannot access protected dashboards or APIs.
+16. Users cannot gain Admin privileges through frontend manipulation.
+17. Logout and session expiration work correctly.
+18. Existing Admin and User functionality remains unchanged.
+
+Run the relevant tests, builds, and type checks. Fix all errors caused by your implementation.
+
+11. FINAL DELIVERY
+
+At completion, provide a clear report describing:
+
+- What authentication components were implemented.
+- Which existing files were modified.
+- Which new files were created.
+- Which database migrations were added.
+- Which API endpoints were created or updated.
+- Which email provider configuration is required.
+- Which environment variables must be configured.
+- How the primary Admin account is securely initialized.
+- Test results.
+- Any remaining configuration or deployment steps.
+
+FINAL NON-NEGOTIABLE INSTRUCTIONS
+
+This is an existing application, not a new project.
+
+Do not rewrite the application.
+
+Do not change the existing Admin and User dashboard functionality.
+
+Do not change existing role permissions or business logic.
+
+Do not invent a new backend or database architecture when the existing one can be reused.
+
+Do not use mock authentication or fake OTP verification.
+
+Implement a complete, real, secure, integrated email-first OTP login system.
+
+The final result must be fully connected to the existing backend and database, ready for production configuration and deployment.

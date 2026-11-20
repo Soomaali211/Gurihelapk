@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Calendar, MapPin, SlidersHorizontal, Plus, List as ListIcon, Map } from 'lucide-react';
+import { Calendar, MapPin, SlidersHorizontal, Plus, Map, Building2 } from 'lucide-react';
 import { Listing } from '../types';
+import { resolveApiUrl } from '../lib/apiClient';
 
 interface BookingsViewProps {
   listings: Listing[];
@@ -15,20 +16,18 @@ export const BookingsView: React.FC<BookingsViewProps> = ({
   onSwitchToMap,
   onOpenAddModal,
 }) => {
-  const [selectedCity, setSelectedCity] = useState('Hargeisa');
+  const [selectedCity, setSelectedCity] = useState('All');
   const [currencyUnit, setCurrencyUnit] = useState<'USD' | 'SAR'>('USD');
-  const [activeSlide, setActiveSlide] = useState(0);
+  const [slideByUnit, setSlideByUnit] = useState<Record<string, number>>({});
   const [showCalendarSheet, setShowCalendarSheet] = useState(false);
 
-  // Interactive Booking Date range state (Screenshot 4: 15 - 16 November)
   const [startDay, setStartDay] = useState<number>(15);
   const [endDay, setEndDay] = useState<number>(16);
   const [selectingMonth, setSelectingMonth] = useState<'nov' | 'dec'>('nov');
 
-  const dateRangeLabel = `${startDay} - ${endDay} ${selectingMonth === 'nov' ? 'November' : 'December'}`;
+  const dateRangeLabel = `${startDay} - ${endDay} ${selectingMonth === 'nov' ? 'Nov' : 'Dec'}`;
 
   const handleDayClick = (day: number, month: 'nov' | 'dec') => {
-    if (month === 'nov' && day < 15) return; // past dates disabled like Screenshot 4
     setSelectingMonth(month);
     if (day <= startDay || startDay !== endDay) {
       setStartDay(day);
@@ -38,53 +37,75 @@ export const BookingsView: React.FC<BookingsViewProps> = ({
     }
   };
 
-  // November 2026 starts on Sunday (index 0), 30 days
   const novDays = Array.from({ length: 30 }, (_, i) => i + 1);
-  // December 2026 starts on Tuesday (index 2: Sun, Mon empty), 31 days
   const decBlanks = [0, 1];
   const decDays = Array.from({ length: 31 }, (_, i) => i + 1);
 
+  const bookingUnits = listings
+    .filter(
+      (l) =>
+        l.purpose === 'booking' &&
+        (selectedCity === 'All' || l.city.toLowerCase() === selectedCity.toLowerCase())
+    )
+    .map((l) => ({
+      id: l.id,
+      title: `${l.title}, ${l.district}`,
+      priceUSD: `$${l.price.toFixed(2)}`,
+      priceSAR: `${(l.price * 3.75).toFixed(2)} SAR`,
+      specs: `${l.area_m2} m² · ${l.bedrooms} bed · ${l.living_rooms} living · ${l.bathrooms} bath`,
+      images:
+        l.images.length > 0
+          ? l.images.map(resolveApiUrl)
+          : ['/assets/aistudio/GuriHel-app-icon-512-square_b480890b.png'],
+      listingObj: l,
+    }));
+
   return (
-    <div className="flex flex-col bg-[#F6F8F9] flex-1 min-h-0 h-full w-full max-w-full overflow-hidden font-sans select-none relative">
-      {/* Top 3 Pill Bar matching Screenshot 4 backdrop */}
+    <div className="flex flex-col bg-[#F6F8F9] flex-1 min-h-0 h-full w-full overflow-hidden font-sans select-none relative">
+      {/* Top 3 Filter Pills */}
       <div className="bg-white px-2.5 sm:px-3 py-2.5 border-b border-slate-200/80 shrink-0 z-20">
         <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
-          {/* Date Picker Pill -> opens Booking Date Bottom Sheet */}
           <button
+            type="button"
             onClick={() => setShowCalendarSheet(true)}
-            className="min-w-0 px-2 sm:px-2.5 py-2 bg-[#EEF2F0] hover:bg-slate-200 text-slate-900 text-[11px] font-bold rounded-xl flex items-center justify-center gap-1 transition-colors"
+            className="min-w-0 px-2 py-2 bg-[#EEF2F0] hover:bg-slate-200 text-slate-900 text-[11px] font-bold rounded-xl flex items-center justify-center gap-1"
           >
             <Calendar className="w-3.5 h-3.5 text-slate-600 shrink-0" />
             <span className="truncate">{dateRangeLabel}</span>
           </button>
 
-          {/* City Selector Pill */}
           <button
-            onClick={() => setSelectedCity(selectedCity === 'Hargeisa' ? 'Berbera' : 'Hargeisa')}
-            className="min-w-0 px-2 sm:px-2.5 py-2 bg-[#EEF2F0] hover:bg-slate-200 text-slate-900 text-[11px] font-bold rounded-xl flex items-center justify-center gap-1 transition-colors"
+            type="button"
+            onClick={() =>
+              setSelectedCity((prev) =>
+                prev === 'All' ? 'Hargeisa' : prev === 'Hargeisa' ? 'Berbera' : 'All'
+              )
+            }
+            className="min-w-0 px-2 py-2 bg-[#EEF2F0] hover:bg-slate-200 text-slate-900 text-[11px] font-bold rounded-xl flex items-center justify-center gap-1"
           >
             <MapPin className="w-3.5 h-3.5 text-slate-600 shrink-0" />
-            <span className="truncate">{selectedCity === 'Hargeisa' ? 'City' : selectedCity}</span>
+            <span className="truncate">{selectedCity === 'All' ? 'City' : selectedCity}</span>
           </button>
 
-          {/* Filters Pill */}
           <button
+            type="button"
             onClick={() => setShowCalendarSheet(true)}
-            className="min-w-0 px-2 sm:px-2.5 py-2 bg-[#EEF2F0] hover:bg-slate-200 text-slate-900 text-[11px] font-bold rounded-xl flex items-center justify-center gap-1 transition-colors"
+            className="min-w-0 px-2 py-2 bg-[#EEF2F0] hover:bg-slate-200 text-slate-900 text-[11px] font-bold rounded-xl flex items-center justify-center gap-1"
           >
             <SlidersHorizontal className="w-3.5 h-3.5 text-slate-600 shrink-0" />
-            <span className="truncate">Filters</span>
+            <span className="truncate">Dates</span>
           </button>
         </div>
       </div>
 
-      {/* Scrollable Units Feed */}
+      {/* Scrollable Feed or Clean Empty State */}
       <div className="p-3.5 space-y-4 flex-1 overflow-y-auto">
         <div className="flex items-center justify-between px-0.5">
-          <div className="text-sm font-extrabold text-slate-900 tracking-tight">
-            1,718 Units match your search
+          <div className="text-sm font-extrabold text-slate-900 tracking-tight tabular-nums">
+            {bookingUnits.length} Booking {bookingUnits.length === 1 ? 'Unit' : 'Units'}
           </div>
           <button
+            type="button"
             onClick={() => setCurrencyUnit(currencyUnit === 'USD' ? 'SAR' : 'USD')}
             className="text-[10px] font-bold text-[#0B7A3E] bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200"
           >
@@ -92,96 +113,97 @@ export const BookingsView: React.FC<BookingsViewProps> = ({
           </button>
         </div>
 
-        <div className="space-y-4">
-          {[
-            {
-              id: 'bk-1',
-              title: 'Apartment in Jigjiga Yar, Hargeysa',
-              priceUSD: '$85.00',
-              priceSAR: '338.40 SAR',
-              specs: '50 m² · 1 bed · 1 living · 1 bath',
-              images: [
-                'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?auto=format&fit=crop&w=800&q=80',
-                'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?auto=format&fit=crop&w=800&q=80',
-                'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?auto=format&fit=crop&w=800&q=80',
-              ],
-            },
-            {
-              id: 'bk-2',
-              title: 'Executive Suite in Masalaha, Hargeysa',
-              priceUSD: '$65.00',
-              priceSAR: '245.00 SAR',
-              specs: '42 m² · 1 bed · 1 living · 1 bath',
-              images: [
-                'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?auto=format&fit=crop&w=800&q=80',
-                'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?auto=format&fit=crop&w=800&q=80',
-              ],
-            },
-          ].map((unit) => (
-            <div
-              key={unit.id}
-              onClick={() => {
-                if (listings[0]) onListingClick(listings[0]);
-              }}
-              className="bg-white rounded-2xl border border-slate-200/90 hover:border-[#0B7A3E] overflow-hidden shadow-2xs transition-all cursor-pointer"
-            >
-              <div className="relative aspect-16/9 w-full bg-slate-900 overflow-hidden">
-                <img
-                  src={unit.images[activeSlide % unit.images.length]}
-                  alt={unit.title}
-                  className="w-full h-full object-cover"
-                />
-                <div className="absolute bottom-2.5 left-1/2 -translate-x-1/2 flex items-center gap-1.5 bg-black/40 backdrop-blur-xs px-2.5 py-1 rounded-full">
-                  {unit.images.map((_, i) => (
-                    <button
-                      key={i}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setActiveSlide(i);
-                      }}
-                      className={`w-1.5 h-1.5 rounded-full transition-all ${
-                        activeSlide % unit.images.length === i ? 'w-4 bg-white' : 'bg-white/50'
-                      }`}
+        {bookingUnits.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center space-y-3">
+            <Building2 className="w-10 h-10 text-slate-300 mx-auto" />
+            <div className="text-sm font-bold text-slate-900">No Short-Stay Bookings Listed Yet</div>
+            <p className="text-xs text-slate-500 max-w-xs mx-auto leading-relaxed">
+              Properties listed for daily or nightly stay bookings will appear here once published.
+            </p>
+            {onOpenAddModal && (
+              <button
+                type="button"
+                onClick={onOpenAddModal}
+                className="px-4 py-2 bg-[#0B7A3E] text-white text-xs font-bold rounded-xl"
+              >
+                + Add Booking Unit
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {bookingUnits.map((unit) => {
+              const currentSlide = slideByUnit[unit.id] ?? 0;
+              return (
+                <div
+                  key={unit.id}
+                  onClick={() => onListingClick(unit.listingObj)}
+                  className="bg-white rounded-2xl border border-slate-200 hover:border-[#0B7A3E] overflow-hidden shadow-2xs cursor-pointer"
+                >
+                  <div className="relative aspect-16/9 w-full bg-slate-900 overflow-hidden">
+                    <img
+                      src={unit.images[currentSlide % unit.images.length]}
+                      alt={unit.title}
+                      className="w-full h-full object-cover"
                     />
-                  ))}
-                </div>
-              </div>
+                    {unit.images.length > 1 && (
+                      <div className="absolute bottom-2.5 left-1/2 -translate-x-1/2 flex items-center gap-1.5 bg-black/40 backdrop-blur-xs px-2.5 py-1 rounded-full">
+                        {unit.images.map((_, i) => (
+                          <button
+                            key={i}
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSlideByUnit((prev) => ({ ...prev, [unit.id]: i }));
+                            }}
+                            className={`w-1.5 h-1.5 rounded-full transition-all ${
+                              currentSlide % unit.images.length === i ? 'w-4 bg-white' : 'bg-white/50'
+                            }`}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
 
-              <div className="p-3.5 space-y-1">
-                <div className="flex items-baseline gap-1">
-                  <span className="text-base font-black text-[#0B7A3E] tabular-nums">
-                    {currencyUnit === 'USD' ? unit.priceUSD : unit.priceSAR}
-                  </span>
-                  <span className="text-xs font-medium text-slate-500">/ Night</span>
+                  <div className="p-3.5 space-y-1">
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-base font-black text-[#0B7A3E] tabular-nums">
+                        {currencyUnit === 'USD' ? unit.priceUSD : unit.priceSAR}
+                      </span>
+                      <span className="text-xs font-medium text-slate-500">/ Night</span>
+                    </div>
+                    <div className="text-xs font-bold text-slate-700">{unit.specs}</div>
+                    <div className="text-xs text-slate-500 flex items-center gap-1">
+                      <MapPin className="w-3.5 h-3.5 text-[#0B7A3E] shrink-0" />
+                      <span>{unit.title}</span>
+                    </div>
+                  </div>
                 </div>
-                <div className="text-xs font-bold text-slate-700">{unit.specs}</div>
-                <div className="text-xs text-slate-500 flex items-center gap-1">
-                  <MapPin className="w-3.5 h-3.5 text-[#0B7A3E] shrink-0" />
-                  <span>{unit.title}</span>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
-      {/* Full-Width White Bottom Action Bar matching Screenshot 1 */}
+      {/* Bottom Action Bar */}
       <div className="relative z-20 bg-white border-t border-slate-200 grid grid-cols-3 items-center h-13 shrink-0">
         <button
+          type="button"
           onClick={onSwitchToMap}
-          className="h-full flex items-center justify-center gap-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors border-r border-slate-100"
+          className="h-full flex items-center justify-center gap-2 text-xs font-bold text-slate-700 hover:bg-slate-50 border-r border-slate-100"
         >
           <Map className="w-4 h-4 text-slate-500" />
           <span>Map</span>
         </button>
 
         <div className="h-full flex items-center justify-center text-xs font-bold text-slate-700 border-r border-slate-100 tabular-nums">
-          1,718 listings
+          {bookingUnits.length} listings
         </div>
 
         <button
+          type="button"
           onClick={onOpenAddModal}
-          className="h-full flex items-center justify-center gap-2 text-xs font-extrabold text-[#0B7A3E] hover:bg-emerald-50/40 transition-colors"
+          className="h-full flex items-center justify-center gap-2 text-xs font-extrabold text-[#0B7A3E] hover:bg-emerald-50/40"
         >
           <span className="w-5 h-5 rounded-full bg-[#0B7A3E] text-white flex items-center justify-center">
             <Plus className="w-3.5 h-3.5 stroke-3" />
@@ -190,20 +212,20 @@ export const BookingsView: React.FC<BookingsViewProps> = ({
         </button>
       </div>
 
-      {/* Multi-Month Booking Date Bottom Sheet Modal */}
+      {/* Calendar Bottom Sheet */}
       {showCalendarSheet && (
         <div
           onClick={() => setShowCalendarSheet(false)}
-          className="fixed sm:absolute inset-0 z-[500] sm:z-40 bg-black/50 flex flex-col justify-end animate-in fade-in duration-150"
+          className="fixed sm:absolute inset-0 z-[500] sm:z-40 bg-black/50 flex flex-col justify-end"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-white rounded-t-3xl shadow-2xl flex flex-col max-h-[85dvh] sm:max-h-[85%] overflow-hidden animate-in slide-in-from-bottom-6 duration-200 safe-bottom"
+            className="bg-white rounded-t-3xl shadow-2xl flex flex-col max-h-[85dvh] overflow-hidden safe-bottom"
           >
-            {/* Sheet Title */}
             <div className="px-5 pt-5 pb-3 border-b border-slate-100 flex items-center justify-between">
               <h3 className="text-base font-extrabold text-slate-900">Booking Date</h3>
               <button
+                type="button"
                 onClick={() => setShowCalendarSheet(false)}
                 className="text-xs font-bold text-slate-400 hover:text-slate-700"
               >
@@ -211,44 +233,21 @@ export const BookingsView: React.FC<BookingsViewProps> = ({
               </button>
             </div>
 
-            {/* Vertical Multi-Month Calendar Body */}
             <div className="px-5 py-3 overflow-y-auto space-y-5 flex-1">
-              {/* Month 1: November 2026 */}
               <div>
-                <h4 className="text-sm font-bold text-slate-900 mb-3">November 2026</h4>
-                <div className="grid grid-cols-7 text-center text-[10px] font-bold text-slate-500 mb-2 tracking-wider">
-                  <span>SUN</span>
-                  <span>MON</span>
-                  <span>TUE</span>
-                  <span>WED</span>
-                  <span>THU</span>
-                  <span>FRI</span>
-                  <span>SAT</span>
-                </div>
+                <h4 className="text-sm font-bold text-slate-900 mb-3">November</h4>
                 <div className="grid grid-cols-7 gap-y-2 text-center text-xs font-semibold">
                   {novDays.map((day) => {
-                    const isPast = day < 15;
                     const isStart = selectingMonth === 'nov' && day === startDay;
                     const isEnd = selectingMonth === 'nov' && day === endDay;
-                    const isInRange = selectingMonth === 'nov' && day > startDay && day < endDay;
-
                     return (
-                      <div
-                        key={day}
-                        className={`relative flex items-center justify-center h-9 ${
-                          isInRange ? 'bg-slate-200/80' : ''
-                        } ${isStart && endDay > startDay ? 'bg-gradient-to-r from-transparent via-slate-200/80 to-slate-200/80' : ''} ${
-                          isEnd && endDay > startDay ? 'bg-gradient-to-l from-transparent via-slate-200/80 to-slate-200/80' : ''
-                        }`}
-                      >
+                      <div key={day} className="flex items-center justify-center h-9">
                         <button
-                          disabled={isPast}
+                          type="button"
                           onClick={() => handleDayClick(day, 'nov')}
-                          className={`w-9 h-9 rounded-full flex items-center justify-center transition-all tabular-nums ${
+                          className={`w-9 h-9 rounded-full flex items-center justify-center tabular-nums ${
                             isStart || isEnd
-                              ? 'bg-[#1E293B] text-white font-bold shadow-sm'
-                              : isPast
-                              ? 'text-slate-300 cursor-not-allowed'
+                              ? 'bg-[#1E293B] text-white font-bold'
                               : 'text-slate-800 hover:bg-slate-100'
                           }`}
                         >
@@ -260,32 +259,23 @@ export const BookingsView: React.FC<BookingsViewProps> = ({
                 </div>
               </div>
 
-              {/* Month 2: December 2026 */}
               <div>
-                <h4 className="text-sm font-bold text-slate-900 mb-3">December 2026</h4>
-                <div className="grid grid-cols-7 text-center text-[10px] font-bold text-slate-500 mb-2 tracking-wider">
-                  <span>SUN</span>
-                  <span>MON</span>
-                  <span>TUE</span>
-                  <span>WED</span>
-                  <span>THU</span>
-                  <span>FRI</span>
-                  <span>SAT</span>
-                </div>
+                <h4 className="text-sm font-bold text-slate-900 mb-3">December</h4>
                 <div className="grid grid-cols-7 gap-y-2 text-center text-xs font-semibold">
                   {decBlanks.map((b) => (
                     <div key={`blank-${b}`} className="h-9" />
                   ))}
-                  {decDays.slice(0, 12).map((day) => {
+                  {decDays.slice(0, 14).map((day) => {
                     const isStart = selectingMonth === 'dec' && day === startDay;
                     const isEnd = selectingMonth === 'dec' && day === endDay;
                     return (
                       <div key={day} className="flex items-center justify-center h-9">
                         <button
+                          type="button"
                           onClick={() => handleDayClick(day, 'dec')}
-                          className={`w-9 h-9 rounded-full flex items-center justify-center transition-all tabular-nums ${
+                          className={`w-9 h-9 rounded-full flex items-center justify-center tabular-nums ${
                             isStart || isEnd
-                              ? 'bg-[#1E293B] text-white font-bold shadow-sm'
+                              ? 'bg-[#1E293B] text-white font-bold'
                               : 'text-slate-800 hover:bg-slate-100'
                           }`}
                         >
@@ -298,16 +288,14 @@ export const BookingsView: React.FC<BookingsViewProps> = ({
               </div>
             </div>
 
-            {/* Bottom Sticky Footer with Sky-Blue Search CTA matching Screenshot 4 */}
             <div className="px-5 py-3 border-t border-slate-100 bg-white flex items-center justify-between">
-              <div className="text-xs font-bold text-slate-500">
-                {dateRangeLabel}
-              </div>
+              <div className="text-xs font-bold text-slate-500">{dateRangeLabel}</div>
               <button
+                type="button"
                 onClick={() => setShowCalendarSheet(false)}
-                className="px-8 py-2.5 bg-[#0095D9] hover:bg-sky-600 text-white text-xs font-extrabold rounded-xl shadow-xs transition-colors"
+                className="px-8 py-2.5 bg-[#0095D9] text-white text-xs font-extrabold rounded-xl"
               >
-                Search
+                Apply
               </button>
             </div>
           </div>

@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
-import { X, Check, ArrowRight, ArrowLeft, Upload, Trash2, Image as ImageIcon } from 'lucide-react';
+import { X, Check, ArrowRight, ArrowLeft, Upload, Trash2, Loader2 } from 'lucide-react';
 import { Listing, ListingPurpose, PropertyType } from '../types';
-import { INITIAL_BROKERS } from '../data/mockData';
+import { resolveApiUrl } from '../lib/apiClient';
 
 interface AddListingModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmitListing: (listing: Listing) => void;
+  onSubmitListing: (listing: Listing) => Promise<void> | void;
   isAdmin?: boolean;
 }
 
@@ -33,13 +33,76 @@ export const AddListingModal: React.FC<AddListingModalProps> = ({
     'Water Tank',
     'Generator',
   ]);
-  const [imageUrls, setImageUrls] = useState<string[]>([
-    'https://images.unsplash.com/photo-1613977257363-707ba9348227?auto=format&fit=crop&w=800&q=80',
-  ]);
+  const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [customImageUrl, setCustomImageUrl] = useState('');
+  const [imageError, setImageError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
 
   if (!isOpen) return null;
+
+  const MAX_IMAGES = 10;
+
+  const resetFormState = () => {
+    setStep(1);
+    setPurpose('rent');
+    setPropertyType('villa');
+    setTitle('');
+    setDescription('');
+    setPrice(500);
+    setAreaM2(200);
+    setBedrooms(3);
+    setLivingRooms(1);
+    setBathrooms(2);
+    setDistrict('Jigjiga Yar');
+    setAddress('');
+    setSelectedAmenities(['Parking', 'Water Tank', 'Generator']);
+    setImageUrls([]);
+    setCustomImageUrl('');
+    setImageError(null);
+    setSubmitting(false);
+    setIsSubmitted(false);
+  };
+
+  const handleCloseModal = () => {
+    resetFormState();
+    onClose();
+  };
+
+  const compressImageFile = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('Could not read image file.'));
+      reader.onload = () => {
+        const img = new Image();
+        img.onerror = () => reject(new Error('Invalid image format.'));
+        img.onload = () => {
+          const maxDim = 1280;
+          let { width, height } = img;
+          if (width > maxDim || height > maxDim) {
+            if (width >= height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            reject(new Error('Canvas unavailable.'));
+            return;
+          }
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', 0.8));
+        };
+        img.src = String(reader.result || '');
+      };
+      reader.readAsDataURL(file);
+    });
 
   const AMENITIES_LIST = [
     'Parking',
@@ -71,90 +134,126 @@ export const AddListingModal: React.FC<AddListingModalProps> = ({
     );
   };
 
-  const handleDeviceFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files) return;
-    Array.from(e.target.files).forEach((file) => {
-      const reader = new FileReader();
-      reader.onload = (uploadEvent) => {
-        if (uploadEvent.target?.result) {
-          setImageUrls((prev) => [...prev, uploadEvent.target!.result as string]);
-        }
-      };
-      reader.readAsDataURL(file);
-    });
+  const handleDeviceFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    setImageError(null);
+
+    const remainingSlots = MAX_IMAGES - imageUrls.length;
+    if (remainingSlots <= 0) {
+      setImageError(`Maximum ${MAX_IMAGES} images allowed.`);
+      e.target.value = '';
+      return;
+    }
+
+    const selectedFiles = Array.from(files).slice(0, remainingSlots);
+    try {
+      const compressed = await Promise.all(selectedFiles.map(compressImageFile));
+      setImageUrls((prev) => [...prev, ...compressed].slice(0, MAX_IMAGES));
+    } catch (err) {
+      setImageError(err instanceof Error ? err.message : 'Failed to process image.');
+    } finally {
+      e.target.value = '';
+    }
   };
 
-  const handleAddCustomImageUrl = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!customImageUrl.trim()) return;
-    setImageUrls((prev) => [...prev, customImageUrl.trim()]);
+  const handleAddCustomImageUrl = () => {
+    const trimmed = customImageUrl.trim();
+    if (!trimmed) return;
+    setImageError(null);
+    if (imageUrls.length >= MAX_IMAGES) {
+      setImageError(`Maximum ${MAX_IMAGES} images allowed.`);
+      return;
+    }
+    if (!/^(https?:\/\/|data:image\/)/i.test(trimmed)) {
+      setImageError('Image URL must begin with https://, http://, or data:image/.');
+      return;
+    }
+    setImageUrls((prev) => [...prev, trimmed]);
     setCustomImageUrl('');
   };
 
   const removeImage = (index: number) => {
+    setImageError(null);
     setImageUrls((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    const finalImages =
-      imageUrls.length > 0
-        ? imageUrls
-        : ['https://images.unsplash.com/photo-1613977257363-707ba9348227?auto=format&fit=crop&w=800&q=80'];
+    if (submitting) return;
+    setSubmitting(true);
+    setImageError(null);
 
     const newListing: Listing = {
-      id: `hga-${Date.now().toString().slice(-4)}`,
-      title: title || `${propertyType.toUpperCase()} Cusub oo ${purpose === 'rent' ? 'Kiro' : purpose === 'sale' ? 'Iib' : 'Ballan'} ah`,
-      description: description || 'Guri hanti ah oo dhamaystiran oo ku yaal Hargeysa, sharcigiisu caddahay.',
+      id: `hga-${Date.now().toString(36)}`,
+      title:
+        title.trim() ||
+        `${propertyType.toUpperCase()} - ${district}`,
+      description:
+        description.trim() ||
+        `Verified property in ${district}, Hargeisa.`,
       purpose,
       property_type: propertyType,
-      price: Number(price) || 500,
+      price: Number(price) || 0,
       currency: 'USD',
       price_unit: purpose === 'rent' ? 'month' : purpose === 'booking' ? 'night' : 'total',
-      area_m2: Number(areaM2) || 150,
+      area_m2: Number(areaM2) || 0,
       bedrooms: Number(bedrooms) || 0,
       living_rooms: Number(livingRooms) || 1,
       bathrooms: Number(bathrooms) || 1,
       city: district === 'Berbera' ? 'Berbera' : district === 'Burco' ? 'Burco' : 'Hargeisa',
       district,
-      address: address || `Waddada Weyn ee ${district}, Hargeysa`,
-      lat: 9.558 + (Math.random() - 0.5) * 0.02,
-      lng: 44.068 + (Math.random() - 0.5) * 0.02,
-      verified: isAdmin ? true : false, // Admin added listings can be auto-verified
+      address: address.trim() || `${district}, Hargeisa`,
+      lat: 9.558 + (Math.random() - 0.5) * 0.015,
+      lng: 44.068 + (Math.random() - 0.5) * 0.015,
+      verified: isAdmin,
       featured: false,
-      status: isAdmin ? 'live' : 'pending', // Admin added listings go straight live or queue
-      images: finalImages,
+      status: isAdmin ? 'live' : 'pending',
+      images: imageUrls,
       amenities: selectedAmenities,
-      broker: INITIAL_BROKERS[0],
+      broker: {
+        id: 'publisher',
+        name: isAdmin ? 'GuriHel Admin' : 'Property Owner',
+        agency: isAdmin ? 'GuriHel Official' : 'Private Owner',
+        phone: '+252636786709',
+        whatsapp: '252636786709',
+        license: isAdmin ? 'GURIHEL-ADMIN' : 'VERIFIED-USER',
+        district,
+        avatar: '/assets/aistudio/GuriHel-app-icon-rounded_1e742137.png',
+        rating: 5,
+        activeListingsCount: 1,
+        verified: isAdmin,
+      },
       createdAt: new Date().toISOString(),
-      views: 1,
+      views: 0,
     };
 
-    onSubmitListing(newListing);
-    setIsSubmitted(true);
-  };
-
-  const handleFinish = () => {
-    setIsSubmitted(false);
-    setStep(1);
-    onClose();
+    try {
+      await onSubmitListing(newListing);
+      setIsSubmitted(true);
+    } catch (err) {
+      setImageError(err instanceof Error ? err.message : 'Failed to save listing.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
-    <div className="fixed inset-0 z-[500] bg-black/60 backdrop-blur-xs flex items-center justify-center p-2.5 sm:p-4 overflow-y-auto">
-      <div className="bg-white rounded-3xl shadow-2xl max-w-xl w-full overflow-hidden border border-[#C9D2CD] my-auto max-h-[92dvh] overflow-y-auto animate-in zoom-in-95 duration-200 font-sans">
-        {/* Header */}
+    <div className="fixed inset-0 z-[550] bg-black/60 backdrop-blur-xs flex items-center justify-center p-2.5 sm:p-4 overflow-y-auto">
+      <div className="bg-white rounded-3xl shadow-2xl max-w-xl w-full overflow-hidden border border-[#C9D2CD] my-auto max-h-[92dvh] overflow-y-auto font-sans">
         <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50/50">
           <div>
             <h3 className="text-base font-bold text-[#0F3D2A]">
-              {isAdmin ? '🛡️ Admin: Ku Dar Guri / Hanti Cusub' : 'Soo Geli Hanti Cusub'}
+              {isAdmin ? 'Admin: Publish Property' : 'Submit New Property'}
             </h3>
-            <p className="text-xs text-slate-500">Tallaabada {step} ee 4: Macluumaadka & Sawirrada Guriga</p>
+            <p className="text-xs text-slate-500">
+              Step {step} of 4 · Uploaded photos automatically receive the GuriHel watermark
+            </p>
           </div>
           <button
-            onClick={onClose}
-            className="p-1.5 hover:bg-slate-200 text-slate-500 rounded-full transition-colors"
+            type="button"
+            onClick={handleCloseModal}
+            className="p-1.5 hover:bg-slate-200 text-slate-500 rounded-full"
           >
             <X className="w-5 h-5" />
           </button>
@@ -162,47 +261,43 @@ export const AddListingModal: React.FC<AddListingModalProps> = ({
 
         {isSubmitted ? (
           <div className="p-8 text-center space-y-4">
-            <div className="w-16 h-16 rounded-full bg-emerald-100 text-[#0B7A3E] flex items-center justify-center mx-auto text-2xl shadow-inner">
+            <div className="w-16 h-16 rounded-full bg-emerald-100 text-[#0B7A3E] flex items-center justify-center mx-auto">
               <Check className="w-8 h-8 stroke-3" />
             </div>
-            <h3 className="text-lg font-black text-[#0F3D2A]">Hantida Waa La Diiwaangeliyay!</h3>
+            <h3 className="text-lg font-black text-[#0F3D2A]">Property Saved!</h3>
             <p className="text-xs sm:text-sm text-slate-600 max-w-xs mx-auto leading-relaxed">
               {isAdmin
-                ? 'Gurgii si guul leh ayaa loogu daray suuqa GuriHel (Live waana la xaqiijiyay).'
-                : 'Xayeysiiskaaga waxaa loo gudbiyay Safka Ansixinta Maamulka (Admin Approvals Queue).'}
+                ? 'Published live on the marketplace with official GuriHel watermarking.'
+                : 'Your property has been submitted for Admin review.'}
             </p>
-            <div className="pt-4">
-              <button
-                onClick={handleFinish}
-                className="w-full py-3 bg-[#0B7A3E] hover:bg-[#0F3D2A] text-white text-xs font-bold rounded-2xl shadow-md transition-all"
-              >
-                Waayahay, Ku Laabo App-ka
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={handleCloseModal}
+              className="w-full py-3 bg-[#0B7A3E] hover:bg-[#0F3D2A] text-white text-xs font-bold rounded-2xl"
+            >
+              Done
+            </button>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="p-5 space-y-4">
-            {/* Step 1: Purpose & Type */}
             {step === 1 && (
               <div className="space-y-4">
                 <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1.5">
-                    1. Ujeedka Hantida (Purpose):
-                  </label>
+                  <label className="text-xs font-bold text-slate-700 block mb-1.5">Purpose</label>
                   <div className="grid grid-cols-3 gap-2">
                     {[
-                      { id: 'rent', label: 'Kiro (Rent)' },
-                      { id: 'sale', label: 'Iib (Sale)' },
-                      { id: 'booking', label: 'Ballan (Stay)' },
+                      { id: 'rent', label: 'Rent' },
+                      { id: 'sale', label: 'Sale' },
+                      { id: 'booking', label: 'Booking' },
                     ].map((p) => (
                       <button
                         key={p.id}
                         type="button"
                         onClick={() => setPurpose(p.id as ListingPurpose)}
-                        className={`py-2.5 text-xs font-bold rounded-xl border transition-all ${
+                        className={`py-2.5 text-xs font-bold rounded-xl border ${
                           purpose === p.id
-                            ? 'bg-[#0B7A3E] text-white border-[#0B7A3E] shadow-sm'
-                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                            ? 'bg-[#0B7A3E] text-white border-[#0B7A3E]'
+                            : 'bg-slate-50 text-slate-700 border-slate-200'
                         }`}
                       >
                         {p.label}
@@ -213,24 +308,24 @@ export const AddListingModal: React.FC<AddListingModalProps> = ({
 
                 <div>
                   <label className="text-xs font-bold text-slate-700 block mb-1.5">
-                    2. Nooca Hantida (Property Type):
+                    Property Type
                   </label>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                     {[
                       { id: 'villa', label: 'Villa' },
                       { id: 'apartment', label: 'Apartment' },
-                      { id: 'land', label: 'Dhul Banaan' },
-                      { id: 'commercial', label: 'Dukaan / Ganacsi' },
-                      { id: 'building', label: 'Dabaq Dhammaystiran' },
+                      { id: 'land', label: 'Land' },
+                      { id: 'commercial', label: 'Commercial' },
+                      { id: 'building', label: 'Building' },
                     ].map((t) => (
                       <button
                         key={t.id}
                         type="button"
                         onClick={() => setPropertyType(t.id as PropertyType)}
-                        className={`p-2.5 text-left text-xs font-bold rounded-xl border transition-all ${
+                        className={`p-2.5 text-left text-xs font-bold rounded-xl border ${
                           propertyType === t.id
-                            ? 'bg-emerald-50 text-[#0B7A3E] border-[#0B7A3E] ring-1 ring-[#0B7A3E]'
-                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                            ? 'bg-emerald-50 text-[#0B7A3E] border-[#0B7A3E]'
+                            : 'bg-slate-50 text-slate-700 border-slate-200'
                         }`}
                       >
                         {t.label}
@@ -243,26 +338,23 @@ export const AddListingModal: React.FC<AddListingModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setStep(2)}
-                    className="px-5 py-2.5 bg-[#0B7A3E] hover:bg-[#0F3D2A] text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-sm transition-all"
+                    className="px-5 py-2.5 bg-[#0B7A3E] text-white text-xs font-bold rounded-xl flex items-center gap-1.5"
                   >
-                    <span>Soco Tallaabada 2</span>
+                    <span>Next</span>
                     <ArrowRight className="w-4 h-4" />
                   </button>
                 </div>
               </div>
             )}
 
-            {/* Step 2: Location & Address */}
             {step === 2 && (
               <div className="space-y-4">
                 <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1">
-                    Degmada Hargeysa:
-                  </label>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">District</label>
                   <select
                     value={district}
                     onChange={(e) => setDistrict(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:bg-white focus:border-[#0B7A3E] outline-none"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium"
                   >
                     {DISTRICTS.map((d) => (
                       <option key={d} value={d}>
@@ -273,117 +365,92 @@ export const AddListingModal: React.FC<AddListingModalProps> = ({
                 </div>
 
                 <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1">
-                    Cinwaanka Tooska ah ama Meesha u Dhow (Landmark / Address):
-                  </label>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">Address / Landmark</label>
                   <input
                     type="text"
                     value={address}
                     onChange={(e) => setAddress(e.target.value)}
-                    placeholder="t.g. Waddada Mansoor Hotel u dhow, Jigjiga Yar"
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:bg-white focus:border-[#0B7A3E] outline-none"
+                    placeholder="e.g. Near Mansoor Hotel, Jigjiga Yar"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium"
                   />
-                </div>
-
-                <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl text-[11px] text-emerald-800 leading-relaxed">
-                  📍 Gurigani waxaa si toos ah loogu heli doonaa Khariidadda OpenStreetMap iyadoo leh biinka qiimaha ee saxda ah.
                 </div>
 
                 <div className="pt-2 flex justify-between">
                   <button
                     type="button"
                     onClick={() => setStep(1)}
-                    className="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-xl flex items-center gap-1"
+                    className="px-4 py-2 text-xs font-medium text-slate-600 rounded-xl flex items-center gap-1"
                   >
                     <ArrowLeft className="w-3.5 h-3.5" />
-                    Dib u noqo
+                    Back
                   </button>
                   <button
                     type="button"
                     onClick={() => setStep(3)}
-                    className="px-5 py-2.5 bg-[#0B7A3E] hover:bg-[#0F3D2A] text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-sm transition-all"
+                    className="px-5 py-2.5 bg-[#0B7A3E] text-white text-xs font-bold rounded-xl flex items-center gap-1.5"
                   >
-                    <span>Soco Tallaabada 3</span>
+                    <span>Next</span>
                     <ArrowRight className="w-4 h-4" />
                   </button>
                 </div>
               </div>
             )}
 
-            {/* Step 3: Price, Specs, Amenities */}
             {step === 3 && (
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="text-xs font-bold text-slate-700 block mb-1">
-                      Qiimaha (USD):
-                    </label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-2.5 text-xs text-slate-400 font-bold">$</span>
-                      <input
-                        type="number"
-                        value={price}
-                        onChange={(e) => setPrice(Number(e.target.value))}
-                        className="w-full pl-7 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:bg-white focus:border-[#0B7A3E] outline-none tabular-nums"
-                      />
-                    </div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">Price (USD)</label>
+                    <input
+                      type="number"
+                      value={price}
+                      onChange={(e) => setPrice(Number(e.target.value))}
+                      className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold tabular-nums"
+                    />
                   </div>
-
                   <div>
-                    <label className="text-xs font-bold text-slate-700 block mb-1">
-                      Baaxadda (m²):
-                    </label>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">Area (m²)</label>
                     <input
                       type="number"
                       value={areaM2}
                       onChange={(e) => setAreaM2(Number(e.target.value))}
-                      className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:bg-white focus:border-[#0B7A3E] outline-none tabular-nums"
+                      className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold tabular-nums"
                     />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-3 gap-2">
                   <div>
-                    <label className="text-xs font-bold text-slate-700 block mb-1">
-                      Qolalka Jiifka:
-                    </label>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">Bedrooms</label>
                     <input
                       type="number"
                       value={bedrooms}
                       onChange={(e) => setBedrooms(Number(e.target.value))}
-                      className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:bg-white focus:border-[#0B7A3E] outline-none tabular-nums"
+                      className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold tabular-nums"
                     />
                   </div>
-
                   <div>
-                    <label className="text-xs font-bold text-slate-700 block mb-1">
-                      Fadhiga (Living):
-                    </label>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">Living</label>
                     <input
                       type="number"
                       value={livingRooms}
                       onChange={(e) => setLivingRooms(Number(e.target.value))}
-                      className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:bg-white focus:border-[#0B7A3E] outline-none tabular-nums"
+                      className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold tabular-nums"
                     />
                   </div>
-
                   <div>
-                    <label className="text-xs font-bold text-slate-700 block mb-1">
-                      Musqulaha:
-                    </label>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">Bathrooms</label>
                     <input
                       type="number"
                       value={bathrooms}
                       onChange={(e) => setBathrooms(Number(e.target.value))}
-                      className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:bg-white focus:border-[#0B7A3E] outline-none tabular-nums"
+                      className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold tabular-nums"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1.5">
-                    Adeegyada Diyaarka ah (Amenities):
-                  </label>
+                  <label className="text-xs font-bold text-slate-700 block mb-1.5">Amenities</label>
                   <div className="flex flex-wrap gap-1.5">
                     {AMENITIES_LIST.map((amenity) => {
                       const isSelected = selectedAmenities.includes(amenity);
@@ -392,10 +459,10 @@ export const AddListingModal: React.FC<AddListingModalProps> = ({
                           key={amenity}
                           type="button"
                           onClick={() => toggleAmenity(amenity)}
-                          className={`px-2.5 py-1 text-xs rounded-lg border transition-all ${
+                          className={`px-2.5 py-1 text-xs rounded-lg border ${
                             isSelected
                               ? 'bg-[#0B7A3E] text-white border-[#0B7A3E]'
-                              : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                              : 'bg-slate-50 text-slate-600 border-slate-200'
                           }`}
                         >
                           {amenity}
@@ -409,103 +476,100 @@ export const AddListingModal: React.FC<AddListingModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setStep(2)}
-                    className="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-xl flex items-center gap-1"
+                    className="px-4 py-2 text-xs font-medium text-slate-600 rounded-xl flex items-center gap-1"
                   >
                     <ArrowLeft className="w-3.5 h-3.5" />
-                    Dib u noqo
+                    Back
                   </button>
                   <button
                     type="button"
                     onClick={() => setStep(4)}
-                    className="px-5 py-2.5 bg-[#0B7A3E] hover:bg-[#0F3D2A] text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-sm transition-all"
+                    className="px-5 py-2.5 bg-[#0B7A3E] text-white text-xs font-bold rounded-xl flex items-center gap-1.5"
                   >
-                    <span>Soco Tallaabada 4</span>
+                    <span>Next</span>
                     <ArrowRight className="w-4 h-4" />
                   </button>
                 </div>
               </div>
             )}
 
-            {/* Step 4: Title, Description, Image Upload & Submit */}
             {step === 4 && (
               <div className="space-y-4">
                 <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1">
-                    Cinwaanka Xayeysiiska (Title):
-                  </label>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">Title *</label>
                   <input
                     type="text"
+                    required
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
-                    placeholder="t.g. Villa Casri ah oo 4 Qol leh ee Jigjiga Yar"
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:bg-white focus:border-[#0B7A3E] outline-none"
-                    required
+                    placeholder="e.g. Modern 4BR Villa in Jigjiga Yar"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium"
                   />
                 </div>
 
                 <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1">
-                    Faahfaahin Dheeraad ah (Description):
-                  </label>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">Description</label>
                   <textarea
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
-                    placeholder="Qor faahfaahinta guriga, jidka, biyaha, korontada..."
+                    placeholder="Property highlights, access road, utilities..."
                     rows={3}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:bg-white focus:border-[#0B7A3E] outline-none resize-none"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium resize-none"
                   />
                 </div>
 
-                {/* Comprehensive Image Upload Section */}
                 <div className="space-y-2">
                   <label className="text-xs font-bold text-slate-700 block">
-                    Sawirrada Guriga (Upload from Device or URL):
+                    Property Photos (Automatically stamped with GuriHel watermark)
                   </label>
 
-                  {/* File Upload Input */}
-                  <div className="flex items-center gap-2">
-                    <label className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 bg-emerald-50 hover:bg-emerald-100 text-[#0B7A3E] border border-emerald-200 rounded-xl text-xs font-bold cursor-pointer transition-colors">
-                      <Upload className="w-4 h-4" />
-                      <span>Ka soo Upload garay Sawir Taleefanka / PC-ga</span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        onChange={handleDeviceFileUpload}
-                        className="hidden"
-                      />
-                    </label>
-                  </div>
+                  <label className="flex items-center justify-center gap-2 py-2.5 px-4 bg-emerald-50 hover:bg-emerald-100 text-[#0B7A3E] border border-emerald-200 rounded-xl text-xs font-bold cursor-pointer">
+                    <Upload className="w-4 h-4" />
+                    <span>Upload Photos From Device</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={handleDeviceFileUpload}
+                      className="hidden"
+                    />
+                  </label>
 
-                  {/* Add URL fallback */}
                   <div className="flex items-center gap-2">
                     <input
                       type="text"
                       value={customImageUrl}
                       onChange={(e) => setCustomImageUrl(e.target.value)}
-                      placeholder="Ama ku dar Image URL..."
-                      className="flex-1 p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none"
+                      placeholder="Or paste an image URL..."
+                      className="flex-1 p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs"
                     />
                     <button
                       type="button"
                       onClick={handleAddCustomImageUrl}
                       className="px-3 py-2 bg-slate-800 text-white rounded-xl text-xs font-bold"
                     >
-                      Ku Dar
+                      Add
                     </button>
                   </div>
 
-                  {/* Image Previews Grid */}
+                  {imageError && (
+                    <div className="p-2 bg-red-50 border border-red-200 rounded-xl text-[11px] font-medium text-red-700">
+                      {imageError}
+                    </div>
+                  )}
+
                   {imageUrls.length > 0 && (
                     <div className="grid grid-cols-4 gap-2 pt-1">
                       {imageUrls.map((img, idx) => (
-                        <div key={idx} className="relative aspect-square rounded-xl overflow-hidden border border-slate-200 group bg-slate-100">
-                          <img src={img} alt={`Preview ${idx}`} className="w-full h-full object-cover" />
+                        <div
+                          key={idx}
+                          className="relative aspect-square rounded-xl overflow-hidden border border-slate-200 bg-slate-100"
+                        >
+                          <img src={resolveApiUrl(img)} alt={`Preview ${idx}`} className="w-full h-full object-cover" />
                           <button
                             type="button"
                             onClick={() => removeImage(idx)}
-                            className="absolute top-1 right-1 p-1 bg-red-600 text-white rounded-full shadow-md opacity-80 hover:opacity-100"
-                            title="Tirtir sawirka"
+                            className="absolute top-1 right-1 p-1 bg-red-600 text-white rounded-full"
                           >
                             <Trash2 className="w-3 h-3" />
                           </button>
@@ -519,17 +583,18 @@ export const AddListingModal: React.FC<AddListingModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setStep(3)}
-                    className="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-xl flex items-center gap-1"
+                    className="px-4 py-2 text-xs font-medium text-slate-600 rounded-xl flex items-center gap-1"
                   >
                     <ArrowLeft className="w-3.5 h-3.5" />
-                    Dib u noqo
+                    Back
                   </button>
                   <button
                     type="submit"
-                    className="px-6 py-2.5 bg-[#0B7A3E] hover:bg-[#0F3D2A] text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-md transition-all active:scale-95"
+                    disabled={submitting}
+                    className="px-6 py-2.5 bg-[#0B7A3E] hover:bg-[#0F3D2A] text-white text-xs font-bold rounded-xl flex items-center gap-1.5 disabled:opacity-50"
                   >
-                    <Check className="w-4 h-4" />
-                    {isAdmin ? 'Gudbi oo Toos u Daabac (Live)' : 'Gudbi Xayeysiiska'}
+                    {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                    <span>{isAdmin ? 'Publish Live' : 'Submit Listing'}</span>
                   </button>
                 </div>
               </div>

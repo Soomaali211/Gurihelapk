@@ -1,0 +1,476 @@
+MASTER PROMPT — COMPLETE AQAR APK REVERSE ENGINEERING, AUTHENTICATION REPLACEMENT, ADMIN PORTAL & BRANDING
+
+PROJECT OBJECTIVE
+
+You are working on an existing Aqar-inspired real estate mobile application (APK), including its existing backend, database, Admin Portal, and customer-facing features.
+
+Your task is to deeply inspect, understand, improve, and transform the existing project while preserving its useful architecture and functionality.
+
+This is not a request to build an unrelated application from scratch.
+
+You must work with the actual existing project files, inspect the current implementation, and make changes only within the existing project.
+
+The work must be completed in the following phases.
+
+---
+
+PHASE 01 — COMPLETE PROJECT INSPECTION
+
+Before making any changes:
+
+1. Inspect the complete project structure, including:
+   
+   - Mobile application
+   - Backend and APIs
+   - Database and models
+   - Authentication system
+   - Admin Portal
+   - Image and file storage
+   - Navigation and routing
+   - Existing integrations
+   - Configuration and deployment files
+
+2. Identify the technologies and frameworks currently used.
+
+3. Identify all existing screens, modules, functions, workflows, and user roles.
+
+4. Inspect the existing login and registration system in detail.
+
+5. Identify obsolete authentication methods and dependencies that must be replaced.
+
+6. Create a technical report describing:
+   
+   - What currently works
+   - What is incomplete
+   - What needs replacement
+   - What must be preserved
+   - Potential security vulnerabilities
+
+IMPORTANT: Do not modify the project before completing this inspection.
+
+PHASE 02 — COMPLETE LOGIN & AUTHENTICATION REPLACEMENT
+
+Mandatory requirement
+
+The entire existing Login, Registration, and Authentication system must be replaced.
+
+Do not simply add WhatsApp OTP to the old login system.
+
+Remove the old authentication interface, obsolete registration workflow, old login methods, and unnecessary authentication routes.
+
+The new system must have one unified login entry point.
+
+New login workflow
+
+Step 1: Phone number
+
+Display a clean and modern login screen where users enter their phone number.
+
+- Support international phone number formats.
+- Normalize numbers into E.164 format.
+- Validate phone numbers on the backend.
+- Provide an intuitive country code selector.
+
+Step 2: WhatsApp OTP
+
+After the user submits their number:
+
+- Generate a secure, random, one-time verification code on the backend.
+- Send the code through WhatsApp using the official WhatsApp Business Platform or a legitimate supported provider.
+- Display the OTP verification screen.
+- Provide resend functionality with cooldown.
+- Validate the OTP on the backend.
+
+Do not simulate WhatsApp delivery or display fake success messages.
+
+If WhatsApp delivery fails, clearly report the failure.
+
+Step 3: Account identification
+
+After successful OTP verification, the backend must identify whether the verified number is the exclusive Admin number or a Regular User number.
+
+EXCLUSIVE ADMIN ACCOUNT
+
+The only authorized Admin phone number is:
+
+"+252636786709"
+
+When this exact normalized number successfully verifies its OTP:
+
+1. Automatically identify the account as Admin.
+2. Create a secure authenticated Admin session.
+3. Navigate directly into the APK.
+4. Open the Admin Dashboard.
+5. Grant access to the complete Admin Portal and all authorized administrative functions.
+6. Do not request Full Name or Email.
+7. Do not require an additional registration process.
+
+No other phone number may receive Admin privileges.
+
+There must be no alternative Admin registration, Admin creation, or client-side role assignment mechanism.
+
+REGULAR USER ACCOUNT
+
+Every other successfully verified phone number must be identified as a Regular User.
+
+After OTP verification:
+
+1. Display a profile completion screen.
+2. Require Full Name.
+3. Require Email.
+4. Save the verified phone number, Full Name, and Email to the user's profile.
+5. Navigate into the customer-facing APK.
+6. Give the user Regular User permissions only.
+
+If the user already has a completed profile, do not repeatedly request the same information. Load the existing profile and continue into the APK.
+
+The verified phone number must uniquely identify the user account.
+
+AUTHENTICATION SECURITY
+
+- OTP verification must happen on the backend.
+- OTP must be securely hashed at rest.
+- OTP must expire and be single-use.
+- Implement resend cooldowns and rate limits.
+- Prevent brute-force attempts and OTP replay.
+- Protect authentication sessions and tokens.
+- Implement logout, session expiration, and revocation.
+- Never expose WhatsApp provider credentials in the mobile application.
+- Never trust a role supplied by the client.
+- Never allow users to change their own role.
+- Enforce Admin permissions on every protected backend endpoint.
+
+The Admin allowlist must be controlled by secure backend configuration.
+
+A frontend screen, local storage value, modified APK, or manipulated JWT must never be sufficient to obtain Admin privileges.
+
+REMOVE OLD AUTHENTICATION COMPLETELY
+
+The new authentication system must replace the old system throughout the project:
+
+- Login screens
+- Registration screens
+- Authentication routes
+- Navigation guards
+- API authentication middleware
+- Backend authentication controllers
+- Session handling
+- User role identification
+- Profile creation workflows
+
+Remove obsolete code and dependencies where safe.
+
+Do not delete unrelated user, property, or business data during this replacement.
+
+PHASE 03 — ADMIN ACCESS CONTROL
+
+The Admin must have complete authorized control over the system.
+
+Inspect the existing Admin Portal and preserve its existing working modules.
+
+Admin permissions must be enforced on the backend.
+
+Review access to:
+
+- Dashboard
+- Property management
+- User management
+- Property listings
+- Bookings
+- Customer requests
+- Services
+- Reports
+- Statistics
+- Settings
+- Image uploads
+- Data exports
+- Administrative operations
+
+Only the exclusive Admin account may access these functions.
+
+Regular Users must never access Admin functionality by manually entering URLs, modifying requests, changing local storage, or manipulating client-side state.
+
+PHASE 04 — COMPLETE ADMIN PORTAL TRANSFORMATION
+
+Inspect the existing Admin Portal and improve its design and usability.
+
+Preserve useful existing functionality.
+
+Improve:
+
+- Dashboard layout
+- Navigation
+- Sidebar
+- Header
+- Property management interface
+- User management
+- Property details
+- Image management
+- Search and filtering
+- Reports and statistics
+- Settings
+- Responsive mobile and desktop layouts
+
+Use a consistent, professional real estate management design.
+
+Do not remove existing working modules simply to simplify the implementation.
+
+PHASE 05 — OFFICIAL LOGO & GLOBAL BRANDING
+
+I will provide the official application logo.
+
+Use the exact uploaded logo throughout the application.
+
+Do not redesign, recreate, replace, or substitute the official logo.
+
+Apply it where appropriate:
+
+- Mobile application interface
+- Login screens
+- Splash screen
+- Admin Portal
+- Navigation and headers
+- Application icon
+- Relevant empty states
+- Property photo watermark
+
+Create technically appropriate logo variants where required, preserving the original proportions and appearance.
+
+Property photo watermark
+
+Use the official logo as a subtle watermark on property images.
+
+Requirements:
+
+- Configurable watermark position and transparency.
+- Preserve the original uploaded image.
+- Avoid applying the watermark multiple times to the same image.
+- Do not cover important property details.
+- Maintain good image quality.
+- Apply consistent branding to newly uploaded property images.
+
+If the official logo has not yet been supplied, create the required asset references and wait for the actual logo before finalizing branding.
+
+PHASE 06 — CLEAN INITIAL SYSTEM & FIRST PROPERTY
+
+The application must start with a clean, genuine initial state.
+
+Remove demo and fake business data, including:
+
+- Demo properties
+- Fake property listings
+- Fake users
+- Fake bookings
+- Fake requests
+- Fake conversations
+- Artificial business statistics
+
+Do not insert artificial records to make the dashboard appear populated.
+
+Preserve necessary system configuration, database schemas, categories, lookup tables, authentication configuration, and other required system records.
+
+First property workflow
+
+The Admin must manually enter the first property.
+
+The workflow must support:
+
+1. Opening property management.
+2. Selecting Add Property.
+3. Entering property information.
+4. Entering location and relevant details.
+5. Uploading property images.
+6. Applying the official watermark.
+7. Saving the property.
+8. Publishing or making it available according to the existing application workflow.
+9. Displaying the property to customers when available.
+
+Empty states must be professionally designed.
+
+Statistics must show genuine zero values when there is no real data.
+
+IMPORTANT: Do not delete production databases or reset existing user data through ordinary application startup or migrations. Any production data reset must require explicit authorization and a backup.
+
+PHASE 07 — DEEP UI/UX AND FEATURE REPLICATION
+
+Use the supplied Aqar app reference material and screen recordings to understand the original user experience.
+
+Inspect screens individually and document:
+
+- Screen layout
+- Visual hierarchy
+- Colors
+- Typography
+- Spacing
+- Cards
+- Buttons
+- Icons
+- Navigation
+- Interactive elements
+- Loading states
+- Empty states
+- Error states
+- User workflows
+
+Inspect and implement the relevant existing application modules, including where present:
+
+- Property listings map
+- Property listings list
+- Rent and Sale
+- Filters
+- New Orders
+- Buying Requests
+- Real Estate Projects
+- Bookings
+- Profile
+- Update Profile
+- Services
+- Ejar Contracts
+- Chat
+- Residential Statistics
+
+Do not assume this list is exhaustive. Inspect the actual project and reference materials.
+
+Preserve the existing business logic and make the screens consistent with the intended user experience.
+
+PHASE 08 — BACKEND, DATABASE & INTEGRATION
+
+Inspect the existing backend and database before changing them.
+
+Implement the new authentication system using the existing architecture wherever practical.
+
+Ensure that:
+
+- Mobile application and backend communicate correctly.
+- WhatsApp OTP delivery is connected to a real provider.
+- User profiles are saved persistently.
+- Admin identity is determined securely by the backend.
+- User permissions are enforced server-side.
+- Property management works correctly.
+- Image uploads and storage work correctly.
+- The Admin Portal and APK share consistent data.
+- Database migrations preserve valid existing data.
+- Existing unrelated integrations remain functional.
+
+Do not create unnecessary duplicate APIs, tables, authentication systems, or data models.
+
+Do not hardcode secrets in source code.
+
+PHASE 09 — COMPLETE END-TO-END TESTING
+
+Test the entire system from first launch.
+
+Admin test
+
+1. Open the APK.
+2. Enter +252636786709.
+3. Request WhatsApp OTP.
+4. Receive the actual OTP.
+5. Enter the correct OTP.
+6. Verify that Admin is identified automatically.
+7. Confirm direct entry into the APK.
+8. Confirm access to the complete Admin Portal.
+9. Add the first property.
+10. Upload images.
+11. Save and publish the property.
+12. Confirm that it appears correctly in the customer application.
+
+Regular User test
+
+1. Open the APK.
+2. Enter another phone number.
+3. Receive WhatsApp OTP.
+4. Enter the correct OTP.
+5. Confirm that the profile completion form appears.
+6. Enter Full Name and Email.
+7. Save the profile.
+8. Confirm entry into the customer application.
+9. Confirm that the user has no Admin privileges.
+
+Security test
+
+Test:
+
+- Incorrect OTP
+- Expired OTP
+- Reused OTP
+- Excessive OTP attempts
+- Resend cooldown
+- WhatsApp delivery failure
+- Session expiration
+- Logout
+- Unauthorized Admin API requests
+- Direct Admin Portal access by Regular Users
+- Role escalation attempts
+- Modified client-side role values
+- Unauthorized property and user modifications
+
+Regression test
+
+Verify that existing working application features continue to function after the authentication replacement.
+
+PHASE 10 — FINAL SECURITY AUDIT & PRODUCTION RELEASE
+
+Before declaring the project complete:
+
+1. Audit the entire authentication implementation.
+2. Confirm that the old login system is no longer accessible.
+3. Confirm that only +252636786709 can become Admin.
+4. Confirm that every other number is a Regular User.
+5. Verify that all Admin APIs enforce server-side permissions.
+6. Verify WhatsApp OTP delivery using the real provider.
+7. Verify official logo integration.
+8. Verify property watermarking.
+9. Verify clean initial state.
+10. Verify that no demo business records remain.
+11. Verify database integrity.
+12. Verify mobile and Admin Portal responsiveness.
+13. Verify production configuration, HTTPS, secrets, backups, and recovery procedures.
+
+Provide a final technical report describing:
+
+- Files changed
+- Modules replaced
+- New authentication architecture
+- WhatsApp integration details
+- Admin access-control implementation
+- Database changes
+- Branding changes
+- Tests performed
+- Remaining issues
+- Production deployment requirements
+
+---
+
+STRICT DEVELOPMENT RULES
+
+1. Work on the existing project; do not create an unrelated replacement application.
+2. Inspect files before modifying them.
+3. Do not assume the project's framework or architecture.
+4. Do not delete existing working features.
+5. Do not replace real business logic with mock data.
+6. Do not use fake OTP delivery or simulated authentication success.
+7. Do not expose secrets in frontend code.
+8. Do not grant Admin access based on frontend logic.
+9. Do not add alternative Admin phone numbers.
+10. Do not destroy valid database records.
+11. Complete each phase and verify it before proceeding.
+12. Keep the project runnable after every major phase.
+13. Report actual implementation progress; never claim an unfinished feature is complete.
+
+FINAL ACCEPTANCE CRITERIA
+
+The project is complete only when:
+
+- The entire old Login and Registration system has been replaced.
+- All users enter using phone number and WhatsApp OTP.
+- +252636786709 automatically enters as Admin after successful verification.
+- All other verified numbers complete Full Name and Email and enter as Regular Users.
+- Only the exclusive Admin account has Admin Portal permissions.
+- The official uploaded logo is integrated throughout the application.
+- The system contains no fake demo properties or business records.
+- Admin can manually create and publish the first property.
+- Existing useful application features remain operational.
+- Backend authorization and end-to-end security tests pass.
+
+Begin with PHASE 01. Do not skip the inspection phase or start making assumptions about the existing project.

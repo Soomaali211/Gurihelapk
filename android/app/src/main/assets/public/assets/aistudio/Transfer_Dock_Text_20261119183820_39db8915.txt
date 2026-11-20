@@ -1,0 +1,83 @@
+PHASE 08 — COMPLETE INTEGRATION & WORKFLOW REPLICATION
+
+Act as a senior full-stack integration engineer.
+
+Your task is to connect all frontend screens, business logic, APIs, database operations and external services.
+
+The application must function as one connected system.
+
+1. Module integration
+
+Connect:
+
+- Listings with search and filters.
+- Map with List.
+- Listings with property details.
+- Buying Requests with their search and map interface.
+- Developers with Projects.
+- Bookings with calendar and property information.
+- Profile with user account data.
+- Services with their respective workflows.
+- Ejar Contracts with the appropriate contract process.
+- Chat with conversation data.
+- Statistics with the data aggregation layer.
+
+2. End-to-end user workflows
+
+Test complete workflows, including:
+
+Workflow A — Property discovery
+
+Open Listings → Select Rent/Sale → Search → Apply Filters → View Map → Switch to List → Open Property Details.
+
+Workflow B — Buying requests
+
+Open Buying Requests → Search → Select Category → Explore Map → Open Request Details.
+
+Workflow C — Projects
+
+Open Projects → Browse Developers → View Featured Projects → View All → Open Project Details.
+
+Workflow D — Bookings
+
+Open Bookings → Select Date → Search → View Results → Open Booking Details.
+
+Workflow E — Profile
+
+Open Profile → Update Profile → Validate Information → Save → Verify Updated Information.
+
+Workflow F — Authentication
+
+Open Login → Select Country Code → Enter Phone Number → Request OTP → Verify OTP → Enter Application.
+
+Workflow G — Chat
+
+Open Chat → Select Conversation → Open Thread → Send Message → Verify Message State.
+
+Workflow H — Statistics
+
+Open Residential Stats → Select City → Select Rent/Sale → Select Property Type → Show Stats → View Results.
+
+3. Integration requirements
+
+- No disconnected screens.
+- No fake navigation.
+- No hardcoded success responses.
+- No inconsistent application state.
+- No duplicate data creation.
+- Correct loading and error handling.
+- Reliable persistence.
+- Proper API-to-UI data mapping.
+
+4. Deliverables
+
+Produce:
+
+- Workflow implementation report.
+- Integration architecture.
+- API connectivity report.
+- Workflow completion matrix.
+- Identified defects.
+- Evidence of successful end-to-end operations.
+
+STOP when all available workflows have been integrated and tested.

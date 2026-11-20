@@ -1,0 +1,152 @@
+PHASE 06 — FULL FEATURE & FUNCTIONAL REPLICATION
+
+Act as a senior full-stack application engineer.
+
+Your task is to implement the actual functionality behind every identified module in the Aqar application.
+
+The goal is functional parity, not merely visual similarity.
+
+1. Listings module
+
+Implement:
+
+- Property listings.
+- Rent and Sale categories.
+- Map and List views.
+- Property category filters.
+- Search.
+- Sorting by Latest, Price and Nearest.
+- Property detail pages.
+- Property images and galleries.
+- Map markers and marker selection.
+- Add listing/request workflow where verified.
+
+Map and List must display synchronized data.
+
+2. Filters and New Order
+
+Implement:
+
+- Age selection.
+- Car entrance.
+- Private roof.
+- Apartment in villa.
+- Two entrances.
+- Special entrances.
+- Non-Saudi Ownership Zone.
+- Near bus.
+- Near metro.
+- Back and Next navigation.
+
+Preserve filter selections between steps.
+
+3. Buying Requests
+
+Implement the request discovery interface, search, categories, map representation and request details.
+
+Verify the exact request workflow before implementing unsupported assumptions.
+
+4. Real Estate Projects
+
+Implement:
+
+- Real estate developers.
+- Developer profiles.
+- Featured projects.
+- View All.
+- Explore Cities.
+- Project cards.
+- Project details.
+
+5. Bookings
+
+Implement:
+
+- Booking calendar.
+- Date selection.
+- Search.
+- Booking listings.
+- Booking details.
+- Booking status.
+
+Do not invent a reservation confirmation process if it cannot be verified.
+
+6. Profile
+
+Implement:
+
+- Profile information.
+- Update Profile.
+- My Ads.
+- District Broker Campaigns.
+- Requests.
+- Alerts.
+- Ejar Contracts.
+- My Bookings.
+- Unit Reservation Requests.
+- Clients / My Clients.
+- Account balance display.
+
+7. Services
+
+Implement:
+
+- Customer Service.
+- Subscriptions.
+- Selling and Leasing Commission.
+- Developers Services.
+- Today Ads.
+- Lease Contracts.
+- Search Requests.
+- Average Prices.
+- Property Deals.
+
+8. Ejar Contracts
+
+Implement residential and commercial contract selection, pricing display and the verified next-step workflow.
+
+Do not claim official Ejar integration without a verified API and authorization.
+
+9. Authentication
+
+Implement:
+
+- Country code selection.
+- Phone number validation.
+- OTP request.
+- OTP verification.
+- Resend code.
+- Session management.
+- Logout.
+
+Use a real authentication provider or backend implementation.
+
+10. Chat
+
+Implement:
+
+- Conversation list.
+- Empty state.
+- Chat thread.
+- Message sending and receiving.
+- Message timestamps.
+- Appropriate error and loading states.
+
+11. Residential Statistics
+
+Implement:
+
+- City selection.
+- Rent / Sale selection.
+- Apartments / Floors / Villas.
+- Show Stats.
+- Statistical results.
+- Charts and summaries.
+
+Use real or clearly identified demo data, never fabricated production statistics.
+
+12. Deliverables
+
+Provide working implementations, module documentation, feature coverage and test evidence.
+
+Do not mark a feature complete merely because its screen exists.

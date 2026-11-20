@@ -1,0 +1,84 @@
+PHASE 05 — NAVIGATION & INTERACTION REPLICATION
+
+Act as a senior mobile application interaction engineer.
+
+Your task is to make every visible UI control behave consistently with the original Aqar application.
+
+1. Bottom navigation
+
+Implement and test all six navigation tabs:
+
+- Profile
+- Listings
+- Projects
+- Bookings
+- Chat
+- Services
+
+Requirements:
+
+- Correct destination.
+- Active and inactive states.
+- Persistent navigation.
+- Correct back-stack behavior.
+- Preserve relevant screen state when navigating between tabs.
+
+2. Listings interactions
+
+Implement:
+
+- Rent / Sale switching.
+- Search.
+- Filters.
+- Property category chips.
+- Map / List switching.
+- Listing selection.
+- Add action.
+
+3. Forms and controls
+
+Implement:
+
+- Dropdowns.
+- Toggles.
+- Calendar selection.
+- Search fields.
+- Form navigation.
+- Input validation.
+- Back and Next actions.
+
+4. Profile and services interactions
+
+Implement all visible navigation actions and service entries.
+
+5. Interaction states
+
+Every interactive control must support appropriate:
+
+- Default.
+- Pressed.
+- Focused.
+- Selected.
+- Disabled.
+- Loading.
+- Error.
+- Success states.
+
+6. Rules
+
+- No decorative buttons without actions.
+- No dead navigation links.
+- No fake success messages.
+- No interactions that only change appearance without performing their intended operation.
+- Maintain consistent navigation history.
+
+7. Deliverables
+
+Provide:
+
+- Complete interaction inventory.
+- Navigation implementation.
+- Interaction test results.
+- List of unresolved behaviors.
+
+STOP after all verified navigation and visible interactions work correctly.

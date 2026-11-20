@@ -1,0 +1,107 @@
+PHASE 02 — DEEP REVERSE ENGINEERING
+
+Act as a professional mobile application reverse engineer.
+
+Your task is to investigate the original Aqar application in depth using the supplied video, screenshots and available interactive reference environment.
+
+Do not develop the replica yet.
+
+1. Screen-by-screen analysis
+
+Investigate every available screen, including:
+
+- Default state.
+- Selected state.
+- Unselected state.
+- Expanded and collapsed states.
+- Empty state.
+- Loading state.
+- Error state.
+- Success state.
+- Scrolling behavior.
+- Modal and bottom-sheet behavior.
+- Keyboard behavior.
+- Back navigation.
+
+For every screen document:
+
+1. Screen name and purpose.
+2. Layout structure.
+3. Header and navigation.
+4. Components.
+5. Buttons and controls.
+6. User interactions.
+7. Destination screens.
+8. Data displayed.
+9. Validation rules.
+10. Unknown or unverified behavior.
+
+2. Button and interaction investigation
+
+Create a complete button inventory.
+
+For each button identify:
+
+- Exact label or icon.
+- Screen location.
+- Visual appearance.
+- Action when tapped.
+- Expected result.
+- Navigation destination.
+- Loading or disabled states.
+- Dependencies.
+
+Do not assign functionality to a button unless it is observed or independently verified.
+
+3. Navigation investigation
+
+Map all discovered navigation paths.
+
+Identify:
+
+- Bottom navigation.
+- Back navigation.
+- Nested pages.
+- Modal navigation.
+- Search-to-detail navigation.
+- Form step navigation.
+- Cross-module navigation.
+
+4. Feature extraction
+
+Investigate all modules:
+
+- Property listings.
+- Map and list views.
+- Search and filters.
+- Buying requests.
+- Real estate projects.
+- Bookings.
+- User profile.
+- Ads and requests.
+- Customer services.
+- Subscriptions.
+- Commission services.
+- Ejar contracts.
+- Authentication.
+- Chat.
+- Residential statistics.
+
+5. Deliverables
+
+Create:
+
+- Screen specification for every discovered screen.
+- Button and interaction matrix.
+- Navigation flow diagram.
+- Feature inventory.
+- User journey diagrams.
+- Workflow specifications.
+- Unknown behavior register.
+
+Assign each finding one status:
+VERIFIED / INFERRED / UNVERIFIED.
+
+Do not proceed to implementation.
+
+STOP and request approval for Phase 03.

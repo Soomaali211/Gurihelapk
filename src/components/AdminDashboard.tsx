@@ -1,876 +1,1832 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { User as FirebaseUser } from 'firebase/auth';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
-  Users,
+  Activity,
+  BarChart3,
   Building2,
   CalendarCheck,
-  DollarSign,
   CheckCircle2,
-  XCircle,
-  ShieldCheck,
-  TrendingUp,
-  Clock,
-  Database,
-  Lock,
-  Smartphone,
-  Power,
+  Download,
   FileText,
-  AlertTriangle,
+  FolderKanban,
+  Image as ImageIcon,
+  LayoutDashboard,
+  LogOut,
+  Menu,
+  Plus,
   RefreshCw,
+  Search,
+  Settings,
+  ShieldAlert,
+  ShieldCheck,
+  Smartphone,
+  Sparkles,
+  Trash2,
+  Users,
+  X,
+  XCircle,
 } from 'lucide-react';
 import {
-  AdminDevice,
-  AdminRecord,
-  AdminSessionState,
+  AccountStatus,
+  AdminOverview,
+  AdminReports,
+  AdminSessionRecord,
   AuditLogEntry,
+  AuthUser,
   Listing,
+  MediaAssetItem,
+  PasswordResetRequestItem,
+  Project,
+  SystemSettings,
+  UserRole,
+  WatermarkPosition,
+  WatermarkVariant,
+  isAdminRole,
 } from '../types';
 import {
-  isVerifiedAdmin,
-  signInWithGoogleVerified,
-  subscribeAdminDevices,
-  subscribeAuditLogs,
-  revokeAdminDevice,
-  triggerSuperAdminKillSwitch,
-  appendAuditLog,
-} from '../lib/firestoreRepo';
-import { refreshAdminSessionToken, verifyStepUp2FA } from '../lib/adminSecurity';
+  createAdminListing,
+  createAdminProject,
+  deleteAdminListing,
+  deleteAdminMedia,
+  deleteAdminProject,
+  deleteAdminUser,
+  downloadAdminExport,
+  fetchAdminAuditLogs,
+  fetchAdminBookings,
+  fetchAdminLeases,
+  fetchAdminListings,
+  fetchAdminMedia,
+  fetchAdminOverview,
+  fetchAdminPasswordResets,
+  fetchAdminProjects,
+  fetchAdminReports,
+  fetchAdminRequests,
+  fetchAdminSessions,
+  fetchAdminUsers,
+  issueAdminPasswordReset,
+  rejectAdminPasswordReset,
+  resolveApiUrl,
+  revokeAdminSession,
+  rewatermarkAdminMedia,
+  updateAdminBookingStatus,
+  updateAdminListing,
+  updateAdminRequestStatus,
+  updateAdminSettings,
+  updateAdminUser,
+} from '../lib/apiClient';
+import { AddListingModal } from './AddListingModal';
 
 interface AdminDashboardProps {
-  listings: Listing[];
-  onApproveListing: (id: string) => void;
-  onRejectListing: (id: string, reason: string) => void;
+  currentUser: AuthUser;
   onViewListingDetail: (listing: Listing) => void;
-  firebaseUser?: FirebaseUser | null;
-  hasCloudListings?: boolean;
-  onSeedDatabase?: () => Promise<void>;
-  adminRecord?: AdminRecord | null;
-  adminSession?: AdminSessionState | null;
-  currentDevice?: AdminDevice | null;
-  onSessionUpdate?: (next: AdminSessionState) => void;
-  onLockSession?: () => void;
+  onMarketplaceMutated: () => void;
+  onBackToApp: () => void;
+  onLogout: () => void;
 }
 
+type AdminSection =
+  | 'overview'
+  | 'properties'
+  | 'media'
+  | 'projects'
+  | 'users'
+  | 'operations'
+  | 'reports'
+  | 'settings'
+  | 'security';
+
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
-  listings,
-  onApproveListing,
-  onRejectListing,
+  currentUser,
   onViewListingDetail,
-  firebaseUser,
-  hasCloudListings,
-  onSeedDatabase,
-  adminRecord,
-  adminSession,
-  currentDevice,
-  onSessionUpdate,
-  onLockSession,
+  onMarketplaceMutated,
+  onBackToApp,
+  onLogout,
 }) => {
-  const [activeAdminTab, setActiveAdminTab] = useState<
-    'approvals' | 'all_listings' | 'brokers' | 'financials' | 'security'
-  >('approvals');
-  const [rejectId, setRejectId] = useState<string | null>(null);
-  const [rejectReason, setRejectReason] = useState('Dukumenti lahaansho oo aan caddayn');
-  const [seeding, setSeeding] = useState(false);
+  const [section, setSection] = useState<AdminSection>('overview');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  // Super Admin Live Security State
-  const [devices, setDevices] = useState<AdminDevice[]>([]);
-  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
-  const [securityNotice, setSecurityNotice] = useState<string | null>(null);
-
-  // Step-Up 2FA Gate Modal State
-  const [stepUpAction, setStepUpAction] = useState<{
-    title: string;
-    run: () => Promise<void>;
+  const [overview, setOverview] = useState<AdminOverview | null>(null);
+  const [listings, setListings] = useState<Listing[]>([]);
+  const [listingStatusFilter, setListingStatusFilter] = useState('all');
+  const [listingQuery, setListingQuery] = useState('');
+  const [mediaAssets, setMediaAssets] = useState<MediaAssetItem[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [users, setUsers] = useState<AuthUser[]>([]);
+  const [userQuery, setUserQuery] = useState('');
+  const [userRoleFilter, setUserRoleFilter] = useState<'all' | UserRole>('all');
+  const [userStatusFilter, setUserStatusFilter] = useState<'all' | AccountStatus>('all');
+  const [passwordResets, setPasswordResets] = useState<PasswordResetRequestItem[]>([]);
+  const [issuedResetModal, setIssuedResetModal] = useState<{
+    username: string;
+    resetCode: string;
+    expiresAt: string;
   } | null>(null);
-  const [stepUpCode, setStepUpCode] = useState('');
-  const [stepUpError, setStepUpError] = useState<string | null>(null);
-  const [stepUpBusy, setStepUpBusy] = useState(false);
-  const lastActivityRef = useRef<number>(Date.now());
 
-  const pendingListings = listings.filter((l) => l.status === 'pending');
-  const liveListings = listings.filter((l) => l.status === 'live');
-  const adminAuthenticated = isVerifiedAdmin(firebaseUser || null);
+  const [bookings, setBookings] = useState<Array<Record<string, unknown>>>([]);
+  const [requests, setRequests] = useState<Array<Record<string, unknown>>>([]);
+  const [leases, setLeases] = useState<Array<Record<string, unknown>>>([]);
+  const [reports, setReports] = useState<AdminReports | null>(null);
+  const [sessions, setSessions] = useState<AdminSessionRecord[]>([]);
+  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
 
-  // Subscribe to Trusted Devices & Immutable Audit Logs
-  useEffect(() => {
-    if (!firebaseUser || !isVerifiedAdmin(firebaseUser)) return;
-    const unsubDevices = subscribeAdminDevices(firebaseUser, setDevices);
-    const unsubLogs = subscribeAuditLogs(firebaseUser, setAuditLogs);
-    return () => {
-      unsubDevices();
-      unsubLogs();
-    };
-  }, [firebaseUser]);
+  const [settingsForm, setSettingsForm] = useState<SystemSettings | null>(null);
+  const [reapplyWatermark, setReapplyWatermark] = useState(true);
 
-  // 30-min Inactivity Auto-Lock + Silent 15-min Session Refresh
-  useEffect(() => {
-    if (!firebaseUser || !adminSession || !adminRecord || !onLockSession || !onSessionUpdate) {
-      return;
-    }
+  const [showAddListing, setShowAddListing] = useState(false);
+  const [rejectModal, setRejectModal] = useState<{ id: string; reason: string } | null>(null);
 
-    const markActive = () => {
-      lastActivityRef.current = Date.now();
-    };
-    window.addEventListener('pointerdown', markActive);
-    window.addEventListener('keydown', markActive);
+  // Add Project modal state
+  const [showAddProject, setShowAddProject] = useState(false);
+  const [projName, setProjName] = useState('');
+  const [projDev, setProjDev] = useState('');
+  const [projDistrict, setProjDistrict] = useState('Jigjiga Yar');
+  const [projCity, setProjCity] = useState('Hargeisa');
+  const [projPrice, setProjPrice] = useState(120000);
+  const [projStage, setProjStage] = useState<'off_plan' | 'building' | 'ready'>('off_plan');
+  const [projDesc, setProjDesc] = useState('');
 
-    const timer = window.setInterval(async () => {
-      const now = Date.now();
-      // 30 min idle -> force full 2FA re-login
-      if (now - lastActivityRef.current > 30 * 60 * 1000) {
-        onLockSession();
-        return;
-      }
-      // Refresh 15-min token cleanly if < 2 min remaining
-      if (adminSession.expiresAt - now < 2 * 60 * 1000) {
-        try {
-          const idToken = await firebaseUser.getIdToken();
-          const refreshed = await refreshAdminSessionToken({
-            idToken,
-            adminSessionToken: adminSession.token,
-            sessionEpoch: adminRecord.sessionEpoch,
-          });
-          onSessionUpdate(refreshed);
-        } catch {
-          onLockSession();
-        }
-      }
-    }, 30_000);
+  const [loading, setLoading] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-    return () => {
-      window.clearInterval(timer);
-      window.removeEventListener('pointerdown', markActive);
-      window.removeEventListener('keydown', markActive);
-    };
-  }, [firebaseUser, adminSession, adminRecord, onLockSession, onSessionUpdate]);
-
-  const executeWithStepUp = async (title: string, actionFn: () => Promise<void>) => {
-    const now = Date.now();
-    if (adminSession && adminSession.stepUpUntil > now) {
-      await actionFn();
-      return;
-    }
-    setStepUpCode('');
-    setStepUpError(null);
-    setStepUpAction({ title, run: actionFn });
-  };
-
-  const handleStepUpSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (
-      !firebaseUser ||
-      !adminSession ||
-      !adminRecord?.totpSecretEnc ||
-      !stepUpAction ||
-      !onSessionUpdate
-    ) {
-      return;
-    }
-
-    setStepUpBusy(true);
-    setStepUpError(null);
+  const loadAll = useCallback(async () => {
+    setLoading(true);
+    setError(null);
     try {
-      const idToken = await firebaseUser.getIdToken();
-      const refreshed = await verifyStepUp2FA({
-        idToken,
-        adminSessionToken: adminSession.token,
-        encryptedSecret: adminRecord.totpSecretEnc,
-        code: stepUpCode.trim(),
-        sessionEpoch: adminRecord.sessionEpoch,
-      });
-      onSessionUpdate(refreshed);
-      const pendingRun = stepUpAction.run;
-      setStepUpAction(null);
-      setStepUpCode('');
-      await pendingRun();
+      const [ov, ls, md, pr, us, prq, bk, rq, lc, rp, ss, lg] = await Promise.all([
+        fetchAdminOverview(),
+        fetchAdminListings(listingStatusFilter, listingQuery),
+        fetchAdminMedia(),
+        fetchAdminProjects(),
+        fetchAdminUsers({ q: userQuery, role: userRoleFilter, status: userStatusFilter }),
+        fetchAdminPasswordResets(),
+        fetchAdminBookings(),
+        fetchAdminRequests(),
+        fetchAdminLeases(),
+        fetchAdminReports(),
+        fetchAdminSessions(),
+        fetchAdminAuditLogs(),
+      ]);
+      setOverview(ov);
+      setSettingsForm(ov.settings);
+      setListings(ls);
+      setMediaAssets(md);
+      setProjects(pr);
+      setUsers(us);
+      setPasswordResets(prq);
+      setBookings(bk);
+      setRequests(rq);
+      setLeases(lc);
+      setReports(rp);
+      setSessions(ss);
+      setAuditLogs(lg);
     } catch (err) {
-      setStepUpError(err instanceof Error ? err.message : 'Koodhka Step-Up waa khalad.');
+      setError(err instanceof Error ? err.message : 'Failed to load admin console.');
     } finally {
-      setStepUpBusy(false);
+      setLoading(false);
     }
+  }, [listingStatusFilter, listingQuery, userQuery, userRoleFilter, userStatusFilter]);
+
+  useEffect(() => {
+    loadAll();
+  }, [loadAll]);
+
+  const showToast = (msg: string) => {
+    setNotice(msg);
+    setTimeout(() => setNotice((prev) => (prev === msg ? null : prev)), 4000);
   };
 
-  const handleApproveWithAudit = async (id: string) => {
-    onApproveListing(id);
-    if (firebaseUser && isVerifiedAdmin(firebaseUser)) {
-      await appendAuditLog(firebaseUser, {
-        action: 'listing.approved',
-        target: id,
-        details: `Guriga #${id} waa la ansixiyay loona gudbiyay Live.`,
-        deviceLabel: currentDevice?.label || 'Admin Web',
-        stepUpUsed: Boolean(adminSession && adminSession.stepUpUntil > Date.now()),
+  const handleCreateProperty = async (listing: Listing) => {
+    setError(null);
+    try {
+      await createAdminListing({
+        title: listing.title,
+        description: listing.description,
+        purpose: listing.purpose,
+        property_type: listing.property_type,
+        price: listing.price,
+        currency: listing.currency,
+        price_unit: listing.price_unit,
+        area_m2: listing.area_m2,
+        bedrooms: listing.bedrooms,
+        living_rooms: listing.living_rooms,
+        bathrooms: listing.bathrooms,
+        city: listing.city,
+        district: listing.district,
+        address: listing.address,
+        lat: listing.lat,
+        lng: listing.lng,
+        verified: true,
+        featured: listing.featured,
+        status: 'live',
+        images: listing.images,
+        amenities: listing.amenities,
       });
+      showToast('Property published live with official GuriHel watermark.');
+      await loadAll();
+      onMarketplaceMutated();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not publish property.');
     }
   };
 
-  const handleConfirmReject = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (rejectId) {
-      const targetId = rejectId;
-      onRejectListing(targetId, rejectReason);
-      setRejectId(null);
-      if (firebaseUser && isVerifiedAdmin(firebaseUser)) {
-        await appendAuditLog(firebaseUser, {
-          action: 'listing.rejected',
-          target: targetId,
-          details: `Waa la diiday sababta: ${rejectReason}`,
-          deviceLabel: currentDevice?.label || 'Admin Web',
-          stepUpUsed: Boolean(adminSession && adminSession.stepUpUntil > Date.now()),
-        });
-      }
+  const handleListingPatch = async (id: string, patch: Partial<Listing>, message: string) => {
+    setError(null);
+    try {
+      await updateAdminListing(id, patch);
+      showToast(message);
+      await loadAll();
+      onMarketplaceMutated();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update listing.');
     }
   };
+
+  const handleDeleteListing = async (id: string) => {
+    setError(null);
+    try {
+      await deleteAdminListing(id);
+      showToast('Listing removed.');
+      await loadAll();
+      onMarketplaceMutated();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete listing.');
+    }
+  };
+
+  const handleSaveSettings = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    if (!settingsForm) return;
+    setError(null);
+    setLoading(true);
+    try {
+      const res = await updateAdminSettings({
+        platformName: settingsForm.platformName,
+        supportPhone: settingsForm.supportPhone,
+        defaultCity: settingsForm.defaultCity,
+        requireListingModeration: settingsForm.requireListingModeration,
+        watermark: settingsForm.watermark,
+        reapplyExistingMedia: reapplyWatermark,
+      });
+      setSettingsForm(res.settings);
+      showToast(
+        `Settings saved.${
+          reapplyWatermark ? ` Re-watermarked ${res.reprocessedCount} media asset(s).` : ''
+        }`
+      );
+      await loadAll();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save settings.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCreateProject = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    try {
+      await createAdminProject({
+        name: projName.trim(),
+        developerName: projDev.trim(),
+        city: projCity,
+        district: projDistrict,
+        stage: projStage,
+        startingPrice: Number(projPrice) || 0,
+        description: projDesc.trim(),
+        featured: true,
+      });
+      setShowAddProject(false);
+      setProjName('');
+      setProjDev('');
+      setProjDesc('');
+      showToast('Real estate project created.');
+      await loadAll();
+      onMarketplaceMutated();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create project.');
+    }
+  };
+
+  const handleExport = async (
+    resource: 'listings' | 'users' | 'bookings' | 'requests' | 'leases' | 'projects' | 'audit_logs',
+    format: 'csv' | 'json'
+  ) => {
+    try {
+      await downloadAdminExport(resource, format);
+      showToast(`Exported ${resource}.${format}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Export failed.');
+    }
+  };
+
+  const NAV_ITEMS: Array<{ id: AdminSection; label: string; icon: React.ReactNode; badge?: number }> = [
+    { id: 'overview', label: 'Overview', icon: <LayoutDashboard className="w-4 h-4" /> },
+    {
+      id: 'properties',
+      label: 'Properties',
+      icon: <Building2 className="w-4 h-4" />,
+      badge: overview?.listingsPending || undefined,
+    },
+    { id: 'media', label: 'Media & Watermark', icon: <ImageIcon className="w-4 h-4" /> },
+    { id: 'projects', label: 'Projects', icon: <FolderKanban className="w-4 h-4" /> },
+    {
+      id: 'users',
+      label: 'Users & Access',
+      icon: <Users className="w-4 h-4" />,
+      badge: overview?.pendingResetsCount || undefined,
+    },
+    { id: 'operations', label: 'Bookings & Leases', icon: <CalendarCheck className="w-4 h-4" /> },
+    { id: 'reports', label: 'Reports & Exports', icon: <BarChart3 className="w-4 h-4" /> },
+    { id: 'settings', label: 'System Settings', icon: <Settings className="w-4 h-4" /> },
+    { id: 'security', label: 'Audit Logs', icon: <ShieldCheck className="w-4 h-4" /> },
+  ];
+
+  const kpiCards = [
+    { label: 'Total Users', value: overview?.usersTotal ?? 0, sub: `${overview?.usersCompleted ?? 0} completed` },
+    { label: 'Live Properties', value: overview?.listingsLive ?? 0, sub: `${overview?.listingsTotal ?? 0} total` },
+    { label: 'Pending Review', value: overview?.listingsPending ?? 0, sub: `${overview?.listingsRejected ?? 0} rejected` },
+    { label: 'Projects', value: overview?.projectsTotal ?? 0, sub: `${overview?.bookingsTotal ?? 0} bookings` },
+    { label: 'Bookings Revenue', value: `$${(overview?.bookingsRevenue ?? 0).toLocaleString()}`, sub: `${overview?.leasesTotal ?? 0} leases` },
+    { label: 'Active Sessions', value: overview?.activeSessionsCount ?? 0, sub: `${overview?.mediaTotal ?? 0} watermarked media` },
+  ];
+
+  const SidebarContent = (
+    <div className="flex flex-col h-full bg-[#0F3D2A] text-white">
+      <div className="p-4 border-b border-emerald-800/70 flex items-center justify-between gap-2">
+        <img
+          src="/assets/aistudio/GuriHel-logo-reversed_bc2c4e29.png"
+          alt="GuriHel"
+          className="h-8 w-auto object-contain"
+        />
+        <span className="text-[10px] font-bold uppercase px-2 py-0.5 bg-emerald-900/90 text-emerald-200 rounded">
+          Admin
+        </span>
+      </div>
+
+      <div className="px-4 py-3 border-b border-emerald-800/50 text-xs space-y-0.5">
+        <div className="font-bold text-emerald-100 truncate">
+          {currentUser.isPrimaryAdmin ? 'Primary Admin' : 'Administrator'}
+        </div>
+        <div className="text-[11px] text-emerald-200/90 truncate">{currentUser.email}</div>
+      </div>
+
+      <nav className="flex-1 overflow-y-auto p-2.5 space-y-1">
+        {NAV_ITEMS.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => {
+              setSection(item.id);
+              setMobileMenuOpen(false);
+            }}
+            className={`w-full px-3 py-2.5 rounded-xl text-xs font-bold flex items-center justify-between transition-colors ${
+              section === item.id
+                ? 'bg-[#0B7A3E] text-white shadow-xs'
+                : 'text-emerald-100/80 hover:bg-emerald-900/50 hover:text-white'
+            }`}
+          >
+            <span className="flex items-center gap-2.5">
+              {item.icon}
+              <span>{item.label}</span>
+            </span>
+            {item.badge !== undefined && item.badge > 0 && (
+              <span className="px-1.5 py-0.5 text-[10px] font-black rounded bg-amber-400 text-slate-950">
+                {item.badge}
+              </span>
+            )}
+          </button>
+        ))}
+      </nav>
+
+      <div className="p-3 border-t border-emerald-800/70 space-y-2">
+        <button
+          type="button"
+          onClick={onBackToApp}
+          className="w-full py-2 px-3 rounded-xl bg-emerald-900/60 hover:bg-emerald-800 text-xs font-bold flex items-center justify-center gap-2"
+        >
+          <Smartphone className="w-4 h-4" />
+          <span>Customer APK View</span>
+        </button>
+        <button
+          type="button"
+          onClick={onLogout}
+          className="w-full py-2 px-3 rounded-xl bg-red-900/60 hover:bg-red-800 text-xs font-bold flex items-center justify-center gap-2"
+        >
+          <LogOut className="w-4 h-4" />
+          <span>Logout</span>
+        </button>
+      </div>
+    </div>
+  );
 
   return (
-    <div className="p-4 sm:p-8 space-y-6 max-w-7xl mx-auto pb-24">
-      {/* Admin Title & Subtitle */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-            <h1 className="text-xl sm:text-2xl font-black text-[#0F3D2A]">
-              GuriHel Admin Management Console
-            </h1>
+    <div className="flex-1 min-h-0 flex bg-[#F6F8F9] text-slate-900 font-sans overflow-hidden">
+      {/* Desktop Left Sidebar */}
+      <aside className="hidden lg:block w-64 shrink-0 border-r border-slate-200 h-full">
+        {SidebarContent}
+      </aside>
+
+      {/* Mobile Drawer Sidebar */}
+      {mobileMenuOpen && (
+        <div
+          className="fixed inset-0 z-[500] bg-black/50 lg:hidden flex"
+          onClick={() => setMobileMenuOpen(false)}
+        >
+          <div className="w-72 max-w-[85vw] h-full" onClick={(e) => e.stopPropagation()}>
+            {SidebarContent}
           </div>
-          <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            Xarunta Maamulka & Kormeerka Guud ee Suuqa Somaliland (Hargeysa)
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          {adminAuthenticated ? (
-            <>
-              <span className="text-xs font-bold px-3 py-1.5 bg-emerald-100 text-[#0B7A3E] rounded-xl flex items-center gap-1.5">
-                <ShieldCheck className="w-4 h-4" />
-                <span>Super Admin · 2FA ✓ ({firebaseUser?.email})</span>
-              </span>
-              {currentDevice && (
-                <span className="text-[11px] font-bold px-2.5 py-1.5 bg-slate-100 text-slate-700 rounded-xl flex items-center gap-1.5">
-                  <Smartphone className="w-3.5 h-3.5 text-[#0B7A3E]" />
-                  <span>{currentDevice.label}</span>
-                </span>
-              )}
-              {!hasCloudListings && onSeedDatabase && (
-                <button
-                  onClick={async () => {
-                    setSeeding(true);
-                    try {
-                      await onSeedDatabase();
-                    } finally {
-                      setSeeding(false);
-                    }
-                  }}
-                  disabled={seeding}
-                  className="text-xs font-bold px-3 py-1.5 bg-[#0B7A3E] text-white rounded-xl flex items-center gap-1.5 hover:bg-[#0F3D2A]"
-                >
-                  <Database className="w-3.5 h-3.5" />
-                  <span>{seeding ? 'Waa la kaydinayaa...' : 'Ku Shub Xogta Firestore'}</span>
-                </button>
-              )}
-              {onLockSession && (
-                <button
-                  type="button"
-                  onClick={onLockSession}
-                  className="text-xs font-bold px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl flex items-center gap-1.5"
-                  title="Xidh Session-ka (Lock)"
-                >
-                  <Lock className="w-3.5 h-3.5" />
-                  <span>Xidh Session</span>
-                </button>
-              )}
-            </>
-          ) : (
-            <button
-              onClick={() => signInWithGoogleVerified()}
-              className="text-xs font-bold px-3 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-xl flex items-center gap-1.5 transition-colors"
-            >
-              <ShieldCheck className="w-4 h-4" />
-              <span>Ku Gal Google Admin (Firestore Sync)</span>
-            </button>
-          )}
-        </div>
-      </div>
-
-      {securityNotice && (
-        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs font-bold text-[#0B7A3E] flex items-center justify-between gap-2">
-          <span>✓ {securityNotice}</span>
-          <button onClick={() => setSecurityNotice(null)} className="px-2">✕</button>
         </div>
       )}
 
-      {/* KPI Cards Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
-        {/* KPI 1 */}
-        <div className="bg-white p-3.5 sm:p-5 rounded-3xl border border-[#C9D2CD] shadow-xs space-y-2 min-w-0">
-          <div className="flex items-center justify-between text-slate-500">
-            <span className="text-xs font-bold uppercase tracking-wider">Macaamiisha (Users)</span>
-            <Users className="w-4 h-4 text-[#0B7A3E]" />
-          </div>
-          <div className="text-2xl sm:text-3xl font-black text-[#0F3D2A] tabular-nums">48,210</div>
-          <div className="flex items-center gap-1 text-xs font-bold text-emerald-600">
-            <TrendingUp className="w-3.5 h-3.5" />
-            <span>+4.1% bishan</span>
-          </div>
-        </div>
-
-        {/* KPI 2 */}
-        <div className="bg-white p-5 rounded-3xl border border-[#C9D2CD] shadow-xs space-y-2">
-          <div className="flex items-center justify-between text-slate-500">
-            <span className="text-xs font-bold uppercase tracking-wider">Guryaha Live-ka ah</span>
-            <Building2 className="w-4 h-4 text-[#0B7A3E]" />
-          </div>
-          <div className="text-2xl sm:text-3xl font-black text-[#0F3D2A] tabular-nums">
-            {liveListings.length + 23530}
-          </div>
-          <div className="flex items-center gap-1 text-xs font-bold text-emerald-600">
-            <TrendingUp className="w-3.5 h-3.5" />
-            <span>+2.3% cusub</span>
-          </div>
-        </div>
-
-        {/* KPI 3 */}
-        <div className="bg-white p-5 rounded-3xl border border-[#C9D2CD] shadow-xs space-y-2">
-          <div className="flex items-center justify-between text-slate-500">
-            <span className="text-xs font-bold uppercase tracking-wider">Ballamaha (Bookings 30d)</span>
-            <CalendarCheck className="w-4 h-4 text-[#0B7A3E]" />
-          </div>
-          <div className="text-2xl sm:text-3xl font-black text-[#0F3D2A] tabular-nums">1,284</div>
-          <div className="flex items-center gap-1 text-xs font-bold text-emerald-600">
-            <TrendingUp className="w-3.5 h-3.5" />
-            <span>+9.6% kobac</span>
-          </div>
-        </div>
-
-        {/* KPI 4 */}
-        <div className="bg-white p-5 rounded-3xl border border-[#C9D2CD] shadow-xs space-y-2">
-          <div className="flex items-center justify-between text-slate-500">
-            <span className="text-xs font-bold uppercase tracking-wider">Dakhliga (Revenue 30d)</span>
-            <DollarSign className="w-4 h-4 text-[#0B7A3E]" />
-          </div>
-          <div className="text-2xl sm:text-3xl font-black text-[#0B7A3E] tabular-nums">$38,900</div>
-          <div className="flex items-center gap-1 text-xs font-bold text-emerald-600">
-            <TrendingUp className="w-3.5 h-3.5" />
-            <span>+6.0% Zaad / eDahab</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Admin Sub-Navigation */}
-      <div className="flex items-center gap-2 border-b border-slate-200 pb-2 overflow-x-auto no-scrollbar">
-        <button
-          onClick={() => setActiveAdminTab('approvals')}
-          className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 ${
-            activeAdminTab === 'approvals'
-              ? 'bg-[#0B7A3E] text-white shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100'
-          }`}
-        >
-          <Clock className="w-4 h-4" />
-          <span>Safka Ansixinta (Approvals Queue)</span>
-          {pendingListings.length > 0 && (
-            <span className="ml-1.5 px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-400 text-slate-900">
-              {pendingListings.length}
-            </span>
-          )}
-        </button>
-
-        <button
-          onClick={() => setActiveAdminTab('all_listings')}
-          className={`px-4 py-2 text-xs font-bold rounded-xl transition-all ${
-            activeAdminTab === 'all_listings'
-              ? 'bg-[#0B7A3E] text-white shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100'
-          }`}
-        >
-          Dhammaan Hantida ({listings.length})
-        </button>
-
-        <button
-          onClick={() => setActiveAdminTab('brokers')}
-          className={`px-4 py-2 text-xs font-bold rounded-xl transition-all ${
-            activeAdminTab === 'brokers'
-              ? 'bg-[#0B7A3E] text-white shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100'
-          }`}
-        >
-          Dilaaliinta & KYC
-        </button>
-
-        <button
-          onClick={() => setActiveAdminTab('financials')}
-          className={`px-4 py-2 text-xs font-bold rounded-xl transition-all shrink-0 ${
-            activeAdminTab === 'financials'
-              ? 'bg-[#0B7A3E] text-white shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100'
-          }`}
-        >
-          Lacag-Bixinta & Xisaabaadka
-        </button>
-
-        <button
-          onClick={() => setActiveAdminTab('security')}
-          className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 shrink-0 ${
-            activeAdminTab === 'security'
-              ? 'bg-[#0F3D2A] text-white shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100'
-          }`}
-        >
-          <ShieldCheck className="w-4 h-4" />
-          <span>Ammaanka, Devices & Audit Log</span>
-        </button>
-      </div>
-
-      {/* Tab 1: Approvals Queue */}
-      {activeAdminTab === 'approvals' && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-base font-bold text-[#0F3D2A]">
-              Xayeysiisyada Sugaya Ansixinta (Listings Awaiting Moderation)
-            </h3>
-            <span className="text-xs text-slate-500">
-              SLA: Hubin lagu sameeyo 4 saacadood gudahood
-            </span>
-          </div>
-
-          {pendingListings.length === 0 ? (
-            <div className="bg-white rounded-3xl p-10 border border-[#C9D2CD] text-center space-y-2">
-              <CheckCircle2 className="w-12 h-12 text-[#0B7A3E] mx-auto opacity-70" />
-              <h4 className="text-sm font-bold text-slate-800">Safka Ansixintu Waa Maran Yahay!</h4>
-              <p className="text-xs text-slate-500">
-                Dhammaan xayeysiisyada waa la ansixiyay. Marka guri cusub la soo geliyo halkan ayuu toos uga soo muuqanayaa.
-              </p>
+      {/* Main Content Area */}
+      <div className="flex-1 min-w-0 flex flex-col h-full overflow-hidden">
+        {/* Top Header */}
+        <header className="bg-white border-b border-slate-200 px-4 sm:px-6 py-3 flex items-center justify-between gap-3 shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(true)}
+              className="lg:hidden p-2 rounded-xl bg-slate-100 text-slate-700"
+              aria-label="Open menu"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+            <div className="min-w-0">
+              <h1 className="text-base sm:text-lg font-extrabold text-[#0F3D2A] truncate capitalize">
+                {NAV_ITEMS.find((n) => n.id === section)?.label || 'Admin Portal'}
+              </h1>
+              <div className="text-[11px] text-slate-500 flex items-center gap-2 flex-wrap">
+                <span>
+                  {currentUser.isPrimaryAdmin ? 'Primary Admin' : 'Admin'}: {currentUser.email}
+                </span>
+              </div>
             </div>
-          ) : (
-            <div className="space-y-3">
-              {pendingListings.map((listing) => (
-                <div
-                  key={listing.id}
-                  className="bg-white rounded-3xl border-2 border-amber-200 p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
-                >
-                  <div className="flex items-center gap-3.5 min-w-0">
-                    <img
-                      src={listing.images[0]}
-                      alt={listing.title}
-                      className="w-20 h-20 rounded-2xl object-cover shrink-0"
-                    />
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">
-                          Pending Approval
-                        </span>
-                        <span className="text-xs font-bold text-[#0B7A3E] capitalize">
-                          {listing.purpose} · {listing.property_type}
-                        </span>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={loadAll}
+              disabled={loading}
+              className="p-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600"
+              title="Refresh"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowAddListing(true)}
+              className="px-3.5 py-2 bg-[#0B7A3E] hover:bg-[#0F3D2A] text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-xs"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add Property</span>
+            </button>
+          </div>
+        </header>
+
+        {/* Scrollable Workspace */}
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
+          {notice && (
+            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs font-bold text-[#0B7A3E] flex items-center justify-between gap-2">
+              <span className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                {notice}
+              </span>
+              <button type="button" onClick={() => setNotice(null)}>
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
+          {error && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs font-bold text-red-700 flex items-center justify-between gap-2">
+              <span className="flex items-center gap-2">
+                <ShieldAlert className="w-4 h-4 shrink-0" />
+                {error}
+              </span>
+              <button type="button" onClick={() => setError(null)}>
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
+          {/* OVERVIEW */}
+          {section === 'overview' && (
+            <div className="space-y-5">
+              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+                {kpiCards.map((k) => (
+                  <div
+                    key={k.label}
+                    className="bg-white rounded-2xl p-4 border border-slate-200 shadow-2xs space-y-1"
+                  >
+                    <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                      {k.label}
+                    </div>
+                    <div className="text-2xl font-black text-[#0F3D2A] tabular-nums">{k.value}</div>
+                    <div className="text-[11px] text-slate-500 tabular-nums">{k.sub}</div>
+                  </div>
+                ))}
+              </div>
+
+              {(overview?.listingsTotal ?? 0) === 0 ? (
+                <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center space-y-3">
+                  <img
+                    src="/assets/aistudio/GuriHel-mark_d2d21036.png"
+                    alt="GuriHel Mark"
+                    className="w-12 h-12 mx-auto object-contain"
+                  />
+                  <h2 className="text-base font-extrabold text-[#0F3D2A]">
+                    Clean Marketplace Database (0 Properties)
+                  </h2>
+                  <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+                    All legacy demo records have been removed. Publish your first verified property now with automatic GuriHel logo watermarking.
+                  </p>
+                  <div className="pt-2 flex flex-wrap items-center justify-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowAddListing(true)}
+                      className="px-5 py-2.5 bg-[#0B7A3E] hover:bg-[#0F3D2A] text-white text-xs font-bold rounded-xl inline-flex items-center gap-1.5"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Add First Property</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowAddProject(true)}
+                      className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl inline-flex items-center gap-1.5"
+                    >
+                      <FolderKanban className="w-4 h-4" />
+                      <span>Add Project</span>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-extrabold text-[#0F3D2A]">
+                        Pending Moderation ({overview?.listingsPending ?? 0})
+                      </h3>
+                      <button
+                        type="button"
+                        onClick={() => setSection('properties')}
+                        className="text-xs font-bold text-[#0B7A3E] hover:underline"
+                      >
+                        View All
+                      </button>
+                    </div>
+                    {listings.filter((l) => l.status === 'pending').length === 0 ? (
+                      <p className="text-xs text-slate-500 py-4 text-center">
+                        No pending properties waiting for review.
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {listings
+                          .filter((l) => l.status === 'pending')
+                          .slice(0, 4)
+                          .map((l) => (
+                            <div
+                              key={l.id}
+                              className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-2"
+                            >
+                              <div className="min-w-0">
+                                <div className="text-xs font-bold text-slate-900 truncate">{l.title}</div>
+                                <div className="text-[11px] text-slate-500">
+                                  {l.district} · ${l.price.toLocaleString()}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleListingPatch(l.id, { status: 'live', verified: true }, 'Approved')
+                                  }
+                                  className="px-2.5 py-1 bg-[#0B7A3E] text-white text-[11px] font-bold rounded-lg"
+                                >
+                                  Approve
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setRejectModal({ id: l.id, reason: 'Incomplete verification details' })
+                                  }
+                                  className="px-2.5 py-1 bg-red-100 text-red-700 text-[11px] font-bold rounded-lg"
+                                >
+                                  Reject
+                                </button>
+                              </div>
+                            </div>
+                          ))}
                       </div>
-                      <h4 className="text-sm font-bold text-slate-900 mt-1 truncate">{listing.title}</h4>
-                      <div className="text-xs text-slate-500 mt-0.5">
-                        {listing.district}, Hargeysa · {listing.address}
-                      </div>
-                      <div className="text-xs font-black text-[#0B7A3E] mt-1 tabular-nums">
-                        ${listing.price.toLocaleString()} {listing.price_unit === 'month' ? '/bil' : ''}
-                      </div>
+                    )}
+                  </div>
+
+                  <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-extrabold text-[#0F3D2A]">Recent Security Events</h3>
+                      <button
+                        type="button"
+                        onClick={() => setSection('security')}
+                        className="text-xs font-bold text-[#0B7A3E] hover:underline"
+                      >
+                        Full Audit Log
+                      </button>
+                    </div>
+                    <div className="space-y-2 max-h-60 overflow-y-auto">
+                      {auditLogs.slice(0, 6).map((log) => (
+                        <div key={log.id} className="p-2.5 rounded-xl bg-slate-50 text-xs flex justify-between gap-2">
+                          <div className="min-w-0">
+                            <span className="font-mono font-bold text-[#0F3D2A]">{log.action}</span>
+                            <div className="text-[11px] text-slate-600 truncate">{log.details}</div>
+                          </div>
+                          <span className="text-[10px] text-slate-400 whitespace-nowrap tabular-nums">
+                            {new Date(log.createdAt).toLocaleTimeString()}
+                          </span>
+                        </div>
+                      ))}
                     </div>
                   </div>
-
-                  <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
-                    <button
-                      onClick={() => onViewListingDetail(listing)}
-                      className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-xs font-bold text-slate-700 rounded-xl transition-colors"
-                    >
-                      Eeg Sawirrada
-                    </button>
-                    <button
-                      onClick={() => setRejectId(listing.id)}
-                      className="px-3.5 py-2 bg-red-50 hover:bg-red-100 text-xs font-bold text-red-600 rounded-xl transition-colors flex items-center gap-1"
-                    >
-                      <XCircle className="w-4 h-4" />
-                      <span>Diid (Reject)</span>
-                    </button>
-                    <button
-                      onClick={() => handleApproveWithAudit(listing.id)}
-                      className="px-4 py-2 bg-[#0B7A3E] hover:bg-[#0F3D2A] text-xs font-bold text-white rounded-xl shadow-xs transition-colors flex items-center gap-1.5"
-                    >
-                      <CheckCircle2 className="w-4 h-4" />
-                      <span>Ansixi (Approve)</span>
-                    </button>
-                  </div>
                 </div>
-              ))}
+              )}
             </div>
           )}
-        </div>
-      )}
 
-      {/* Tab 2: All Listings */}
-      {activeAdminTab === 'all_listings' && (
-        <div className="bg-white rounded-3xl border border-[#C9D2CD] overflow-hidden shadow-xs">
-          <div className="p-4 border-b border-slate-100 flex justify-between items-center">
-            <h3 className="text-sm font-bold text-[#0F3D2A]">Diiwaanka Hantida Hargeysa ({listings.length})</h3>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
-                <tr>
-                  <th className="p-3">ID</th>
-                  <th className="p-3">Guriga</th>
-                  <th className="p-3">Degmada</th>
-                  <th className="p-3">Qiimaha</th>
-                  <th className="p-3">Dilaalka</th>
-                  <th className="p-3">Xaaladda</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {listings.map((l) => (
-                  <tr key={l.id} className="hover:bg-slate-50">
-                    <td className="p-3 font-mono text-slate-400">#{l.id}</td>
-                    <td className="p-3 font-bold text-slate-800">{l.title}</td>
-                    <td className="p-3 text-slate-600">{l.district}</td>
-                    <td className="p-3 font-bold text-[#0B7A3E] tabular-nums">${l.price.toLocaleString()}</td>
-                    <td className="p-3 text-slate-600">{l.broker.name}</td>
-                    <td className="p-3">
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                          l.status === 'live'
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : l.status === 'pending'
-                            ? 'bg-amber-100 text-amber-800'
-                            : 'bg-red-100 text-red-800'
-                        }`}
-                      >
-                        {l.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* Tab 3: Brokers */}
-      {activeAdminTab === 'brokers' && (
-        <div className="bg-white rounded-3xl border border-[#C9D2CD] p-6 shadow-xs space-y-4">
-          <h3 className="text-sm font-bold text-[#0F3D2A]">Dilaaliinta La Diiwaangeliyay (Verified Brokers)</h3>
-          <div className="space-y-3">
-            {[
-              { name: 'Axmed Xasan Rooble', license: 'SL-MOP-2024-089', district: 'Jigjiga Yar', status: 'Approved' },
-              { name: 'Saynab Cali Jaamac', license: 'SL-MOP-2023-412', district: 'Ibraahim Koodbuur', status: 'Approved' },
-              { name: 'Mustafe Cabdi Daahir', license: 'SL-MOP-2025-104', district: '26 June', status: 'Approved' },
-            ].map((b, i) => (
-              <div key={i} className="p-3.5 bg-slate-50 rounded-2xl flex items-center justify-between">
-                <div>
-                  <div className="text-xs font-bold text-slate-900">{b.name}</div>
-                  <div className="text-[11px] text-slate-500">Shati: {b.license} · {b.district}</div>
+          {/* PROPERTIES */}
+          {section === 'properties' && (
+            <div className="space-y-4">
+              <div className="bg-white rounded-2xl border border-slate-200 p-3.5 flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
+                <div className="relative flex-1">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                  <input
+                    type="text"
+                    value={listingQuery}
+                    onChange={(e) => setListingQuery(e.target.value)}
+                    placeholder="Search title, district, address..."
+                    className="w-full h-9 pl-9 pr-3 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-[#0B7A3E]"
+                  />
                 </div>
-                <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">
-                  {b.status}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Tab 4: Financial Transactions */}
-      {activeAdminTab === 'financials' && (
-        <div className="bg-white rounded-3xl border border-[#C9D2CD] p-6 shadow-xs space-y-4">
-          <h3 className="text-sm font-bold text-[#0F3D2A]">Diiwaanka Lacag-Bixinta (Telesom Zaad / Somtel eDahab)</h3>
-          <div className="space-y-2">
-            {[
-              { id: 'TX-8801', user: 'Cali Maxamuud', service: 'Booking Deposit', amount: '$90', status: 'Paid (Zaad)' },
-              { id: 'TX-8802', user: 'Hodan Real Estate', service: 'Pro Subscription', amount: '$40', status: 'Paid (eDahab)' },
-              { id: 'TX-8803', user: 'Dahabshiil Group', service: 'Featured Placement', amount: '$150', status: 'Paid (Zaad)' },
-            ].map((tx, i) => (
-              <div key={i} className="p-3 bg-slate-50 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
-                <div className="min-w-0">
-                  <span className="font-mono font-bold text-slate-500 mr-2">{tx.id}</span>
-                  <span className="font-bold text-slate-800">{tx.user}</span>
-                  <span className="text-slate-400 mx-1">·</span>
-                  <span className="text-slate-500">{tx.service}</span>
-                </div>
-                <div className="flex items-center gap-3 shrink-0">
-                  <span className="font-bold text-[#0B7A3E] tabular-nums">{tx.amount}</span>
-                  <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[10px] font-bold">
-                    {tx.status}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Tab 5: Super Admin Security, Trusted Devices, Kill Switch & Audit Log */}
-      {activeAdminTab === 'security' && (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* Trusted Devices Card */}
-            <div className="bg-white rounded-3xl border border-[#C9D2CD] p-5 shadow-xs space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Smartphone className="w-4 h-4 text-[#0B7A3E]" />
-                  <h3 className="text-sm font-bold text-[#0F3D2A]">
-                    Trusted Devices (Device Binding)
-                  </h3>
-                </div>
-                <span className="text-[11px] font-bold text-slate-500">
-                  {devices.filter((d) => d.trusted).length} firfircoon
-                </span>
-              </div>
-
-              {devices.length === 0 ? (
-                <p className="text-xs text-slate-500 py-4 text-center">
-                  Weli qalab diiwaangashan ma jiro.
-                </p>
-              ) : (
-                <div className="space-y-2.5">
-                  {devices.map((dev) => (
-                    <div
-                      key={dev.id}
-                      className="p-3 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between gap-3"
+                <div className="flex items-center gap-1.5 overflow-x-auto">
+                  {['all', 'live', 'pending', 'rejected', 'sold'].map((st) => (
+                    <button
+                      key={st}
+                      type="button"
+                      onClick={() => setListingStatusFilter(st)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold capitalize shrink-0 ${
+                        listingStatusFilter === st
+                          ? 'bg-[#0B7A3E] text-white'
+                          : 'bg-slate-100 text-slate-600'
+                      }`}
                     >
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold text-slate-900 truncate">
-                            {dev.label}
-                          </span>
-                          {currentDevice?.id === dev.id && (
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-[#0B7A3E]">
-                              Qalabkan
+                      {st}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {listings.length === 0 ? (
+                <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center space-y-3">
+                  <Building2 className="w-10 h-10 text-slate-300 mx-auto" />
+                  <div className="text-sm font-bold text-slate-800">No properties match this view</div>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddListing(true)}
+                    className="px-4 py-2 bg-[#0B7A3E] text-white text-xs font-bold rounded-xl"
+                  >
+                    + Add Property
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {listings.map((l) => (
+                    <div
+                      key={l.id}
+                      className="bg-white rounded-2xl border border-slate-200 p-4 flex flex-col md:flex-row md:items-center justify-between gap-4"
+                    >
+                      <div className="flex items-center gap-3.5 min-w-0">
+                        <img
+                          src={
+                            l.images[0]
+                              ? resolveApiUrl(l.images[0])
+                              : '/assets/aistudio/GuriHel-app-icon-512-square_b480890b.png'
+                          }
+                          alt={l.title}
+                          className="w-20 h-20 rounded-xl object-cover shrink-0 bg-slate-100 border border-slate-200"
+                        />
+                        <div className="min-w-0 space-y-1">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                                l.status === 'live'
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : l.status === 'pending'
+                                  ? 'bg-amber-100 text-amber-800'
+                                  : 'bg-red-100 text-red-800'
+                              }`}
+                            >
+                              {l.status}
                             </span>
-                          )}
-                        </div>
-                        <div className="text-[11px] text-slate-500 font-mono truncate">
-                          FP: {dev.fingerprint} · Last: {new Date(dev.lastSeenAt || dev.updatedAt).toLocaleString()}
+                            {l.verified && (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#0B7A3E] text-white">
+                                Verified
+                              </span>
+                            )}
+                            {l.featured && (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#F5B800] text-slate-900">
+                                Featured
+                              </span>
+                            )}
+                          </div>
+                          <h4 className="text-sm font-bold text-slate-900 truncate">{l.title}</h4>
+                          <div className="text-xs text-slate-500">
+                            {l.district}, {l.city} · <strong className="text-[#0B7A3E] tabular-nums">${l.price.toLocaleString()}</strong>
+                          </div>
                         </div>
                       </div>
 
-                      {dev.trusted ? (
+                      <div className="flex flex-wrap items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => onViewListingDetail(l)}
+                          className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-bold text-slate-700"
+                        >
+                          Preview
+                        </button>
+                        {l.status !== 'live' && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleListingPatch(l.id, { status: 'live', verified: true }, 'Approved & Live')
+                            }
+                            className="px-3 py-1.5 rounded-xl bg-[#0B7A3E] text-white text-xs font-bold flex items-center gap-1"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>Approve</span>
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() =>
-                            executeWithStepUp(
-                              `Ka saar qalabka (${dev.label})`,
-                              async () => {
-                                if (!firebaseUser) return;
-                                await revokeAdminDevice(firebaseUser, dev.id);
-                                await appendAuditLog(firebaseUser, {
-                                  action: 'device.revoked',
-                                  target: dev.id,
-                                  details: `Qalabka ${dev.label} waa laga qaaday kalsoonida (Revoked).`,
-                                  deviceLabel: currentDevice?.label || 'Admin Web',
-                                  stepUpUsed: true,
-                                });
-                                setSecurityNotice(`Qalabka ${dev.label} waa la joojiyay.`);
-                              }
+                            handleListingPatch(
+                              l.id,
+                              { featured: !l.featured },
+                              l.featured ? 'Removed featured flag' : 'Marked featured'
                             )
                           }
-                          className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 text-[11px] font-bold rounded-xl shrink-0"
+                          className="px-3 py-1.5 rounded-xl bg-amber-50 text-amber-800 border border-amber-200 text-xs font-bold flex items-center gap-1"
                         >
-                          Revoke
+                          <Sparkles className="w-3.5 h-3.5" />
+                          <span>{l.featured ? 'Unfeature' : 'Feature'}</span>
                         </button>
-                      ) : (
-                        <span className="px-2.5 py-1 bg-slate-200 text-slate-600 text-[10px] font-bold rounded-xl shrink-0">
-                          Revoked
-                        </span>
-                      )}
+                        {l.status !== 'rejected' && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setRejectModal({ id: l.id, reason: 'Verification documents required' })
+                            }
+                            className="px-3 py-1.5 rounded-xl bg-red-50 text-red-700 text-xs font-bold flex items-center gap-1"
+                          >
+                            <XCircle className="w-3.5 h-3.5" />
+                            <span>Reject</span>
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteListing(l.id)}
+                          className="p-1.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-700"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
               )}
             </div>
+          )}
 
-            {/* Emergency Kill Switch & Future Expansion Card */}
-            <div className="space-y-4">
-              <div className="bg-red-50/70 rounded-3xl border border-red-200 p-5 space-y-3">
-                <div className="flex items-center gap-2 text-red-800">
-                  <Power className="w-5 h-5" />
-                  <h3 className="text-sm font-black">Kill Switch (Xaalad Degdeg ah)</h3>
+          {/* MEDIA & WATERMARK */}
+          {section === 'media' && settingsForm && (
+            <div className="space-y-5">
+              <div className="bg-white rounded-2xl border border-slate-200 p-5 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                  <div>
+                    <h3 className="text-sm font-extrabold text-[#0F3D2A]">
+                      Official GuriHel Logo Watermark Configuration
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      Originals are stored untouched; watermarks are applied once cleanly onto served property photos.
+                    </p>
+                  </div>
+                  <img
+                    src="/assets/aistudio/GuriHel-logo-primary_c2f3e626.png"
+                    alt="Official Watermark Asset"
+                    className="h-8 w-auto object-contain"
+                  />
                 </div>
-                <p className="text-xs text-red-900/80 leading-relaxed">
-                  Haddii aad ka shakido in qalab lumay ama session la xaday, riix badhankan si loo xidho dhammaan sessions-ka, loo joojiyo dhammaan trusted devices, loona kordhiyo Session Epoch ({adminRecord?.sessionEpoch || 1}).
-                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <label className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs font-bold cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={settingsForm.watermark.enabled}
+                      onChange={(e) =>
+                        setSettingsForm({
+                          ...settingsForm,
+                          watermark: { ...settingsForm.watermark, enabled: e.target.checked },
+                        })
+                      }
+                      className="w-4 h-4 accent-[#0B7A3E]"
+                    />
+                    <span>Enable Watermarking</span>
+                  </label>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 mb-1">Logo Variant</label>
+                    <select
+                      value={settingsForm.watermark.variant}
+                      onChange={(e) =>
+                        setSettingsForm({
+                          ...settingsForm,
+                          watermark: {
+                            ...settingsForm.watermark,
+                            variant: e.target.value as WatermarkVariant,
+                          },
+                        })
+                      }
+                      className="w-full h-10 px-3 rounded-xl bg-slate-50 border border-slate-200 text-xs font-bold"
+                    >
+                      <option value="primary">Primary Full Wordmark</option>
+                      <option value="mark">Compact GuriHel Mark</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 mb-1">Position</label>
+                    <select
+                      value={settingsForm.watermark.position}
+                      onChange={(e) =>
+                        setSettingsForm({
+                          ...settingsForm,
+                          watermark: {
+                            ...settingsForm.watermark,
+                            position: e.target.value as WatermarkPosition,
+                          },
+                        })
+                      }
+                      className="w-full h-10 px-3 rounded-xl bg-slate-50 border border-slate-200 text-xs font-bold"
+                    >
+                      <option value="bottom-right">Bottom Right</option>
+                      <option value="bottom-left">Bottom Left</option>
+                      <option value="top-right">Top Right</option>
+                      <option value="top-left">Top Left</option>
+                      <option value="center">Center Subtle</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                      Opacity ({Math.round(settingsForm.watermark.opacity * 100)}%)
+                    </label>
+                    <input
+                      type="range"
+                      min={10}
+                      max={70}
+                      value={Math.round(settingsForm.watermark.opacity * 100)}
+                      onChange={(e) =>
+                        setSettingsForm({
+                          ...settingsForm,
+                          watermark: {
+                            ...settingsForm.watermark,
+                            opacity: Number(e.target.value) / 100,
+                          },
+                        })
+                      }
+                      className="w-full accent-[#0B7A3E]"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+                  <label className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={reapplyWatermark}
+                      onChange={(e) => setReapplyWatermark(e.target.checked)}
+                      className="w-4 h-4 accent-[#0B7A3E]"
+                    />
+                    <span>Re-apply single watermark from untouched originals to all existing media</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => handleSaveSettings()}
+                    className="px-5 py-2.5 bg-[#0B7A3E] hover:bg-[#0F3D2A] text-white text-xs font-bold rounded-xl"
+                  >
+                    Save Watermark Settings
+                  </button>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-2xl border border-slate-200 p-5 space-y-3">
+                <h3 className="text-sm font-extrabold text-[#0F3D2A]">
+                  Uploaded Property Media ({mediaAssets.length})
+                </h3>
+                {mediaAssets.length === 0 ? (
+                  <p className="text-xs text-slate-500 py-6 text-center">
+                    No uploaded property photos yet. Add a property with photos to manage watermarked assets here.
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {mediaAssets.map((m) => (
+                      <div
+                        key={m.id}
+                        className="rounded-xl border border-slate-200 overflow-hidden bg-slate-50 flex flex-col"
+                      >
+                        <img
+                          src={`${resolveApiUrl(m.url)}?t=${encodeURIComponent(m.createdAt)}`}
+                          alt={m.id}
+                          className="aspect-16/10 w-full object-cover bg-slate-200"
+                        />
+                        <div className="p-3 space-y-2 text-xs">
+                          <div className="flex items-center justify-between">
+                            <span className="font-mono text-[11px] text-slate-500">{m.id}</span>
+                            <span className="font-bold text-[#0B7A3E]">
+                              {m.watermarked ? `${m.watermarkPosition} (${Math.round(m.watermarkOpacity * 100)}%)` : 'Original'}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                await rewatermarkAdminMedia(m.id);
+                                showToast(`Re-applied watermark cleanly on ${m.id}`);
+                                await loadAll();
+                              }}
+                              className="flex-1 py-1.5 rounded-lg bg-[#0B7A3E] text-white font-bold text-[11px]"
+                            >
+                              Re-watermark
+                            </button>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                await deleteAdminMedia(m.id);
+                                showToast(`Deleted media ${m.id}`);
+                                await loadAll();
+                              }}
+                              className="px-2.5 py-1.5 rounded-lg bg-red-50 text-red-700 font-bold text-[11px]"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* PROJECTS */}
+          {section === 'projects' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-extrabold text-[#0F3D2A]">
+                  Real Estate Projects ({projects.length})
+                </h3>
                 <button
                   type="button"
-                  onClick={() =>
-                    executeWithStepUp('Fulinta Kill Switch (Xidh Dhammaan Sessions)', async () => {
-                      if (!firebaseUser || !adminRecord) return;
-                      await triggerSuperAdminKillSwitch(
-                        firebaseUser,
-                        adminRecord.sessionEpoch,
-                        devices,
-                        currentDevice?.label || 'Admin Web'
-                      );
-                      onLockSession?.();
-                    })
-                  }
-                  className="px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl shadow-xs flex items-center gap-2"
+                  onClick={() => setShowAddProject(true)}
+                  className="px-4 py-2 bg-[#0B7A3E] text-white text-xs font-bold rounded-xl flex items-center gap-1.5"
                 >
-                  <Power className="w-4 h-4" />
-                  <span>Xidh Dhammaan Sessions (Kill Switch)</span>
+                  <Plus className="w-4 h-4" />
+                  <span>New Project</span>
                 </button>
               </div>
-
-              <div className="bg-white rounded-3xl border border-[#C9D2CD] p-5 space-y-2">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-extrabold text-[#0F3D2A]">
-                    Heerka Maamulka Hadda & Mustaqbalka
-                  </h4>
-                  <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-[#0B7A3E] text-[10px] font-bold">
-                    Super Admin Only
-                  </span>
+              {projects.length === 0 ? (
+                <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center text-xs text-slate-500">
+                  No development projects published yet.
                 </div>
-                <p className="text-xs text-slate-600 leading-relaxed">
-                  Hadda nidaamku wuxuu u shaqaynayaa <strong>Super Admin keliya</strong> ({firebaseUser?.email}) isagoo leh 2FA TOTP, Device Binding, Step-Up Auth, iyo Audit Log. Qaab-dhismeedka database-ka (`admin_invitations`, `subRole`) wuxuu diyaar u yahay marka mustaqbalka lagu daro Moderator, Finance, iyo Support.
-                </p>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {projects.map((p) => (
+                    <div
+                      key={p.id}
+                      className="bg-white rounded-2xl border border-slate-200 p-4 flex items-center justify-between gap-3"
+                    >
+                      <div className="min-w-0">
+                        <div className="text-sm font-bold text-slate-900 truncate">{p.name}</div>
+                        <div className="text-xs text-slate-500">
+                          {p.developerName} · {p.district}, {p.city} · From ${p.startingPrice.toLocaleString()}
+                        </div>
+                        <div className="text-[11px] text-[#0B7A3E] font-bold mt-1">
+                          Stage: {p.stage} · {p.leadsCount} leads
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await deleteAdminProject(p.id);
+                          showToast('Project deleted');
+                          await loadAll();
+                          onMarketplaceMutated();
+                        }}
+                        className="p-2 rounded-xl bg-red-50 text-red-700 shrink-0"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* USERS, ACCESS & PASSWORD RECOVERY */}
+          {section === 'users' && (
+            <div className="space-y-5">
+              {/* Filter Bar */}
+              <div className="bg-white rounded-2xl border border-slate-200 p-3.5 flex flex-col md:flex-row gap-2.5 items-stretch md:items-center justify-between">
+                <div className="relative flex-1">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                  <input
+                    type="text"
+                    value={userQuery}
+                    onChange={(e) => setUserQuery(e.target.value)}
+                    placeholder="Search username, full name, or email..."
+                    className="w-full h-9 pl-9 pr-3 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-[#0B7A3E]"
+                  />
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <select
+                    value={userRoleFilter}
+                    onChange={(e) => setUserRoleFilter(e.target.value as 'all' | UserRole)}
+                    className="h-9 px-3 rounded-xl bg-slate-50 border border-slate-200 text-xs font-bold"
+                  >
+                    <option value="all">All Roles</option>
+                    <option value="super_admin">Primary Admin</option>
+                    <option value="admin">Admins</option>
+                    <option value="user">Users</option>
+                  </select>
+                  <select
+                    value={userStatusFilter}
+                    onChange={(e) => setUserStatusFilter(e.target.value as 'all' | AccountStatus)}
+                    className="h-9 px-3 rounded-xl bg-slate-50 border border-slate-200 text-xs font-bold"
+                  >
+                    <option value="all">All Statuses</option>
+                    <option value="active">Active</option>
+                    <option value="blocked">Blocked</option>
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => handleExport('users', 'csv')}
+                    className="h-9 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-bold text-slate-700 flex items-center gap-1"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Export CSV</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Users Table */}
+              <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+                <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+                  <h3 className="text-sm font-extrabold text-[#0F3D2A]">
+                    Registered Accounts ({users.length})
+                  </h3>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
+                      <tr>
+                        <th className="p-3">Username</th>
+                        <th className="p-3">Full Name</th>
+                        <th className="p-3">Email</th>
+                        <th className="p-3">Role</th>
+                        <th className="p-3">Status</th>
+                        <th className="p-3">Registered / Last Login</th>
+                        <th className="p-3">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {users.map((u) => {
+                        const isSelf = u.id === currentUser.id;
+                        const protectedAdmin = u.isPrimaryAdmin;
+                        return (
+                          <tr key={u.id}>
+                            <td className="p-3 font-mono font-bold text-slate-900">
+                              {u.username ? `@${u.username}` : u.email || '—'}
+                            </td>
+                            <td className="p-3 font-semibold">{u.fullName || '—'}</td>
+                            <td className="p-3 text-slate-600">{u.email || '—'}</td>
+                            <td className="p-3">
+                              <div className="flex flex-wrap items-center gap-1">
+                                <span
+                                  className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                                    isAdminRole(u.role)
+                                      ? 'bg-[#0F3D2A] text-white'
+                                      : 'bg-slate-100 text-slate-700'
+                                  }`}
+                                >
+                                  {u.role}
+                                </span>
+                                {u.isPrimaryAdmin && (
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900">
+                                    Primary
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="p-3">
+                              <span
+                                className={`px-2 py-0.5 rounded text-[10px] font-bold capitalize ${
+                                  u.status === 'active'
+                                    ? 'bg-emerald-50 text-[#0B7A3E]'
+                                    : 'bg-red-100 text-red-700'
+                                }`}
+                              >
+                                {u.status}
+                              </span>
+                            </td>
+                            <td className="p-3 text-[11px] text-slate-500 whitespace-nowrap tabular-nums">
+                              <div>Reg: {new Date(u.createdAt).toLocaleDateString()}</div>
+                              <div>
+                                Login:{' '}
+                                {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleDateString() : 'Never'}
+                              </div>
+                            </td>
+                            <td className="p-3">
+                              {protectedAdmin ? (
+                                <span className="text-[11px] font-bold text-slate-400">
+                                  Protected Root
+                                </span>
+                              ) : (
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    disabled={isSelf}
+                                    onClick={async () => {
+                                      try {
+                                        const nextRole: UserRole =
+                                          isAdminRole(u.role) ? 'user' : 'admin';
+                                        await updateAdminUser(u.id, { role: nextRole });
+                                        showToast(`${u.email || u.username} role set to ${nextRole}`);
+                                        await loadAll();
+                                      } catch (err) {
+                                        setError(
+                                          err instanceof Error ? err.message : 'Role update failed.'
+                                        );
+                                      }
+                                    }}
+                                    className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 disabled:opacity-40 text-slate-700 text-[11px] font-bold"
+                                  >
+                                    {isAdminRole(u.role) ? 'Demote' : 'Make Admin'}
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    disabled={isSelf}
+                                    onClick={async () => {
+                                      try {
+                                        const next: AccountStatus =
+                                          u.status === 'active' ? 'blocked' : 'active';
+                                        await updateAdminUser(u.id, { status: next });
+                                        showToast(`${u.email || u.username} status set to ${next}`);
+                                        await loadAll();
+                                      } catch (err) {
+                                        setError(
+                                          err instanceof Error ? err.message : 'Status update failed.'
+                                        );
+                                      }
+                                    }}
+                                    className={`px-2 py-1 rounded-lg text-[11px] font-bold disabled:opacity-40 ${
+                                      u.status === 'active'
+                                        ? 'bg-amber-50 text-amber-800 hover:bg-amber-100'
+                                        : 'bg-emerald-50 text-[#0B7A3E] hover:bg-emerald-100'
+                                    }`}
+                                  >
+                                    {u.status === 'active' ? 'Block' : 'Activate'}
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    disabled={isSelf}
+                                    onClick={async () => {
+                                      try {
+                                        await deleteAdminUser(u.id);
+                                        showToast(`Deleted user ${u.email || u.username}`);
+                                        await loadAll();
+                                      } catch (err) {
+                                        setError(
+                                          err instanceof Error ? err.message : 'Could not delete user.'
+                                        );
+                                      }
+                                    }}
+                                    className="p-1 rounded-lg bg-red-50 hover:bg-red-100 disabled:opacity-40 text-red-700"
+                                    title="Delete user"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Password Recovery Requests */}
+              <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+                <div className="p-4 border-b border-slate-100">
+                  <h3 className="text-sm font-extrabold text-[#0F3D2A]">
+                    Password Recovery Requests ({passwordResets.length})
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Issue a single-use 30-minute recovery code after verifying the user&apos;s identity.
+                  </p>
+                </div>
+                {passwordResets.length === 0 ? (
+                  <p className="p-4 text-xs text-slate-500">No password reset requests recorded.</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
+                        <tr>
+                          <th className="p-3">User</th>
+                          <th className="p-3">Email</th>
+                          <th className="p-3">Status</th>
+                          <th className="p-3">Requested</th>
+                          <th className="p-3">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {passwordResets.map((pr) => (
+                          <tr key={pr.id}>
+                            <td className="p-3 font-mono font-bold">@{pr.username}</td>
+                            <td className="p-3 text-slate-600">{pr.email}</td>
+                            <td className="p-3 capitalize font-bold">{pr.status}</td>
+                            <td className="p-3 text-slate-500 tabular-nums">
+                              {new Date(pr.createdAt).toLocaleString()}
+                            </td>
+                            <td className="p-3">
+                              {(pr.status === 'pending' || pr.status === 'issued') && (
+                                <div className="flex items-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      try {
+                                        const res = await issueAdminPasswordReset(pr.id);
+                                        setIssuedResetModal({
+                                          username: res.username,
+                                          resetCode: res.resetCode,
+                                          expiresAt: res.expiresAt,
+                                        });
+                                        await loadAll();
+                                      } catch (err) {
+                                        setError(
+                                          err instanceof Error
+                                            ? err.message
+                                            : 'Could not issue recovery code.'
+                                        );
+                                      }
+                                    }}
+                                    className="px-2.5 py-1 rounded-lg bg-[#0B7A3E] text-white font-bold text-[11px]"
+                                  >
+                                    Issue Code
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      await rejectAdminPasswordReset(pr.id);
+                                      showToast(`Rejected reset for @${pr.username}`);
+                                      await loadAll();
+                                    }}
+                                    className="px-2.5 py-1 rounded-lg bg-red-50 text-red-700 font-bold text-[11px]"
+                                  >
+                                    Reject
+                                  </button>
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              {/* Active Sessions & Revocation */}
+              <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+                <div className="p-4 border-b border-slate-100">
+                  <h3 className="text-sm font-extrabold text-[#0F3D2A]">
+                    Sessions & Revocation ({sessions.length})
+                  </h3>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
+                      <tr>
+                        <th className="p-3">Username</th>
+                        <th className="p-3">Role</th>
+                        <th className="p-3">Device</th>
+                        <th className="p-3">IP</th>
+                        <th className="p-3">State</th>
+                        <th className="p-3">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {sessions.map((s) => (
+                        <tr key={s.id}>
+                          <td className="p-3 font-mono font-bold">
+                            {s.username ? `@${s.username}` : s.phoneE164 || s.userId}
+                          </td>
+                          <td className="p-3 uppercase font-bold">{s.role}</td>
+                          <td className="p-3 max-w-xs truncate">{s.deviceLabel}</td>
+                          <td className="p-3 font-mono">{s.ipAddress}</td>
+                          <td className="p-3">
+                            {s.revokedAt ? (
+                              <span className="text-red-600 font-bold">Revoked</span>
+                            ) : (
+                              <span className="text-[#0B7A3E] font-bold">Active</span>
+                            )}
+                          </td>
+                          <td className="p-3">
+                            {!s.revokedAt && (
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  await revokeAdminSession(s.id);
+                                  showToast(`Revoked session ${s.id}`);
+                                  await loadAll();
+                                }}
+                                className="px-2.5 py-1 rounded-lg bg-red-50 text-red-700 font-bold text-[11px]"
+                              >
+                                Revoke
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
-          {/* Immutable Audit Log Table */}
-          <div className="bg-white rounded-3xl border border-[#C9D2CD] overflow-hidden shadow-xs">
-            <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <FileText className="w-4 h-4 text-[#0B7A3E]" />
-                <h3 className="text-sm font-bold text-[#0F3D2A]">
-                  Audit Log (Diiwaan Aan La Tirtiri Karin)
+          {/* BOOKINGS, REQUESTS & LEASES */}
+          {section === 'operations' && (
+            <div className="space-y-4">
+              <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3">
+                <h3 className="text-sm font-extrabold text-[#0F3D2A]">Bookings ({bookings.length})</h3>
+                {bookings.length === 0 ? (
+                  <p className="text-xs text-slate-500">No bookings recorded yet.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {bookings.map((b) => (
+                      <div
+                        key={String(b.id)}
+                        className="p-3 bg-slate-50 rounded-xl flex flex-wrap items-center justify-between gap-2 text-xs"
+                      >
+                        <div>
+                          <div className="font-bold">{String(b.listing_title)}</div>
+                          <div className="text-slate-500">
+                            {String(b.guest_phone)} · {String(b.nights)} nights · ${Number(b.total).toLocaleString()}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          {(['held', 'confirmed', 'cancelled'] as const).map((st) => (
+                            <button
+                              key={st}
+                              type="button"
+                              onClick={async () => {
+                                await updateAdminBookingStatus(String(b.id), st);
+                                showToast(`Booking ${st}`);
+                                await loadAll();
+                              }}
+                              className={`px-2 py-1 rounded-lg text-[10px] font-bold capitalize ${
+                                b.status === st
+                                  ? 'bg-[#0B7A3E] text-white'
+                                  : 'bg-white border border-slate-200 text-slate-600'
+                              }`}
+                            >
+                              {st}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3">
+                <h3 className="text-sm font-extrabold text-[#0F3D2A]">
+                  Search Requests ({requests.length})
                 </h3>
+                {requests.length === 0 ? (
+                  <p className="text-xs text-slate-500">No customer search requests yet.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {requests.map((r) => (
+                      <div
+                        key={String(r.id)}
+                        className="p-3 bg-slate-50 rounded-xl flex flex-wrap items-center justify-between gap-2 text-xs"
+                      >
+                        <div>
+                          <div className="font-bold">
+                            {String(r.seeker_name)} ({String(r.seeker_phone)})
+                          </div>
+                          <div className="text-slate-500">
+                            {String(r.purpose)} · {String(r.property_type)} · {String(r.district)}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          {(['open', 'matched', 'closed'] as const).map((st) => (
+                            <button
+                              key={st}
+                              type="button"
+                              onClick={async () => {
+                                await updateAdminRequestStatus(String(r.id), st);
+                                showToast(`Request ${st}`);
+                                await loadAll();
+                              }}
+                              className={`px-2 py-1 rounded-lg text-[10px] font-bold capitalize ${
+                                r.status === st
+                                  ? 'bg-[#0B7A3E] text-white'
+                                  : 'bg-white border border-slate-200 text-slate-600'
+                              }`}
+                            >
+                              {st}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-              <span className="text-[11px] text-slate-500">{auditLogs.length} dhacdo</span>
-            </div>
 
-            {auditLogs.length === 0 ? (
-              <div className="p-6 text-center text-xs text-slate-500">
-                Weli wax dhacdo ah laguma qorin Audit Log-ga.
+              <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-2">
+                <h3 className="text-sm font-extrabold text-[#0F3D2A]">
+                  Lease Contracts ({leases.length})
+                </h3>
+                {leases.length === 0 ? (
+                  <p className="text-xs text-slate-500">No lease contracts generated yet.</p>
+                ) : (
+                  leases.map((lc) => (
+                    <div key={String(lc.id)} className="p-3 bg-slate-50 rounded-xl text-xs flex justify-between">
+                      <span className="font-bold">{String(lc.property_title)}</span>
+                      <span className="text-[#0B7A3E] font-bold">${Number(lc.monthly_rent)}/mo</span>
+                    </div>
+                  ))
+                )}
               </div>
-            ) : (
+            </div>
+          )}
+
+          {/* REPORTS & EXPORTS */}
+          {section === 'reports' && (
+            <div className="space-y-5">
+              <div className="bg-white rounded-2xl border border-slate-200 p-5 space-y-3">
+                <h3 className="text-sm font-extrabold text-[#0F3D2A]">Export Platform Data</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+                  {(
+                    [
+                      'listings',
+                      'users',
+                      'bookings',
+                      'requests',
+                      'leases',
+                      'projects',
+                      'audit_logs',
+                    ] as const
+                  ).map((resName) => (
+                    <div
+                      key={resName}
+                      className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-2"
+                    >
+                      <span className="text-xs font-bold capitalize">{resName.replace('_', ' ')}</span>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleExport(resName, 'csv')}
+                          className="px-2 py-1 rounded bg-[#0B7A3E] text-white text-[10px] font-bold"
+                        >
+                          CSV
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleExport(resName, 'json')}
+                          className="px-2 py-1 rounded bg-slate-800 text-white text-[10px] font-bold"
+                        >
+                          JSON
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3">
+                  <h3 className="text-sm font-extrabold text-[#0F3D2A]">Listings by District</h3>
+                  {!reports || reports.byDistrict.length === 0 ? (
+                    <p className="text-xs text-slate-500">0 properties recorded across districts.</p>
+                  ) : (
+                    <div className="space-y-2 text-xs">
+                      {reports.byDistrict.map((d) => (
+                        <div key={d.district} className="flex justify-between p-2 bg-slate-50 rounded-lg">
+                          <span className="font-bold">{d.district}</span>
+                          <span className="tabular-nums">
+                            {d.count} listings · avg ${Math.round(d.avgPrice).toLocaleString()}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3">
+                  <h3 className="text-sm font-extrabold text-[#0F3D2A]">
+                    Hargeisa District Benchmarks (Reference)
+                  </h3>
+                  <div className="space-y-1.5 text-xs">
+                    {(reports?.districtBenchmarks || []).map((b) => (
+                      <div key={b.district} className="flex justify-between p-2 bg-slate-50 rounded-lg">
+                        <span className="font-bold">{b.district}</span>
+                        <span className="tabular-nums text-slate-600">
+                          Rent ${b.avgRentM2}/m² · Sale ${b.avgSaleM2}/m²
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* SYSTEM SETTINGS */}
+          {section === 'settings' && settingsForm && (
+            <form
+              onSubmit={handleSaveSettings}
+              className="bg-white rounded-2xl border border-slate-200 p-5 space-y-4 max-w-2xl"
+            >
+              <h3 className="text-sm font-extrabold text-[#0F3D2A]">Platform Configuration</h3>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Platform Name</label>
+                  <input
+                    type="text"
+                    value={settingsForm.platformName}
+                    onChange={(e) =>
+                      setSettingsForm({ ...settingsForm, platformName: e.target.value })
+                    }
+                    className="w-full h-10 px-3 rounded-xl bg-slate-50 border border-slate-200 font-semibold"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Support Phone</label>
+                  <input
+                    type="text"
+                    value={settingsForm.supportPhone}
+                    onChange={(e) =>
+                      setSettingsForm({ ...settingsForm, supportPhone: e.target.value })
+                    }
+                    className="w-full h-10 px-3 rounded-xl bg-slate-50 border border-slate-200 font-mono font-semibold"
+                  />
+                </div>
+              </div>
+
+              <label className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs font-bold cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={settingsForm.requireListingModeration}
+                  onChange={(e) =>
+                    setSettingsForm({
+                      ...settingsForm,
+                      requireListingModeration: e.target.checked,
+                    })
+                  }
+                  className="w-4 h-4 accent-[#0B7A3E]"
+                />
+                <span>Require Admin Moderation before Regular User listings go live</span>
+              </label>
+
+              <button
+                type="submit"
+                className="px-5 py-2.5 bg-[#0B7A3E] hover:bg-[#0F3D2A] text-white text-xs font-bold rounded-xl"
+              >
+                Save System Settings
+              </button>
+            </form>
+          )}
+
+          {/* SECURITY AUDIT LOGS */}
+          {section === 'security' && (
+            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+              <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-[#0B7A3E]" />
+                  <h3 className="text-sm font-extrabold text-[#0F3D2A]">
+                    Security & Activity Audit Log ({auditLogs.length})
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleExport('audit_logs', 'csv')}
+                  className="px-3 py-1.5 rounded-lg bg-slate-100 text-xs font-bold text-slate-700 flex items-center gap-1"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>Export CSV</span>
+                </button>
+              </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
                   <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
                     <tr>
-                      <th className="p-3">Waqtiga</th>
-                      <th className="p-3">Ficilka (Action)</th>
-                      <th className="p-3">Faahfaahin</th>
-                      <th className="p-3">Qalabka</th>
-                      <th className="p-3">Step-Up</th>
+                      <th className="p-3">Time</th>
+                      <th className="p-3">Actor</th>
+                      <th className="p-3">Action</th>
+                      <th className="p-3">Details</th>
+                      <th className="p-3">IP</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {auditLogs.map((log) => (
-                      <tr key={log.id} className="hover:bg-slate-50">
+                      <tr key={log.id}>
                         <td className="p-3 text-slate-500 whitespace-nowrap tabular-nums">
                           {new Date(log.createdAt).toLocaleString()}
                         </td>
-                        <td className="p-3 font-mono font-bold text-[#0F3D2A]">{log.action}</td>
-                        <td className="p-3 text-slate-700 max-w-md">{log.details}</td>
-                        <td className="p-3 text-slate-500 whitespace-nowrap">{log.deviceLabel}</td>
-                        <td className="p-3">
-                          {log.stepUpUsed ? (
-                            <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-[#0B7A3E] text-[10px] font-bold">
-                              2FA ✓
-                            </span>
-                          ) : (
-                            <span className="text-slate-400 text-[10px]">—</span>
-                          )}
+                        <td className="p-3 font-mono font-bold">
+                          {log.actorUsername ? `@${log.actorUsername}` : log.actorPhone || 'system'}
                         </td>
+                        <td className="p-3 font-mono text-[#0B7A3E] font-bold">{log.action}</td>
+                        <td className="p-3 text-slate-700">{log.details}</td>
+                        <td className="p-3 font-mono text-slate-400">{log.ipAddress}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Reject Modal */}
-      {rejectId && (
-        <div className="fixed inset-0 z-[500] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-5 max-w-sm w-full border border-slate-200 shadow-2xl space-y-3">
-            <h4 className="text-sm font-bold text-red-600">Sababta loo Diiday Xayeysiiska:</h4>
-            <select
-              value={rejectReason}
-              onChange={(e) => setRejectReason(e.target.value)}
-              className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none"
-            >
-              <option value="Dukumenti lahaansho oo aan caddayn">Dukumenti lahaansho oo aan caddayn</option>
-              <option value="Sawirro tayo xun ama been abuur ah">Sawirro tayo xun ama been abuur ah</option>
-              <option value="Qiimo aan waafaqsanayn suuqa Hargeysa">Qiimo aan waafaqsanayn suuqa Hargeysa</option>
-              <option value="Cinwaan khaldan">Cinwaan khaldan</option>
-            </select>
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setRejectId(null)}
-                className="px-3 py-1.5 text-xs text-slate-500 hover:bg-slate-100 rounded-lg"
-              >
-                Ka noqo
-              </button>
-              <button
-                onClick={handleConfirmReject}
-                className="px-4 py-1.5 bg-red-600 text-white text-xs font-bold rounded-lg shadow-xs"
-              >
-                Xaqiiji Diidmada
-              </button>
             </div>
-          </div>
-        </div>
-      )}
+          )}
+        </main>
+      </div>
 
-      {/* Step-Up 2FA Modal for High-Risk Super Admin Actions */}
-      {stepUpAction && (
-        <div className="fixed inset-0 z-[520] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <form
-            onSubmit={handleStepUpSubmit}
-            className="bg-white rounded-3xl p-6 max-w-sm w-full border border-slate-200 shadow-2xl space-y-4"
-          >
-            <div className="flex items-center gap-2.5">
-              <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
-                <Lock className="w-5 h-5" />
-              </div>
-              <div>
-                <h4 className="text-sm font-black text-[#0F3D2A]">Step-Up 2FA Xaqiijin</h4>
-                <p className="text-[11px] text-slate-500">{stepUpAction.title}</p>
-              </div>
-            </div>
+      {/* Add First Property Modal (Admin Mode) */}
+      <AddListingModal
+        isOpen={showAddListing}
+        onClose={() => setShowAddListing(false)}
+        onSubmitListing={handleCreateProperty}
+        isAdmin
+      />
 
-            {stepUpError && (
-              <div className="p-2.5 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 shrink-0" />
-                <span>{stepUpError}</span>
-              </div>
-            )}
-
+      {/* Reject Reason Modal */}
+      {rejectModal && (
+        <div className="fixed inset-0 z-[520] bg-black/60 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-5 max-w-sm w-full space-y-3 border border-slate-200 shadow-2xl">
+            <h4 className="text-sm font-bold text-red-700">Rejection Reason</h4>
             <input
               type="text"
-              inputMode="numeric"
-              maxLength={6}
-              value={stepUpCode}
-              onChange={(e) => setStepUpCode(e.target.value.replace(/\D/g, ''))}
-              placeholder="000000"
-              autoFocus
-              className="w-full h-12 text-center tracking-[0.35em] font-mono text-lg font-black bg-slate-50 border border-slate-300 rounded-2xl focus:bg-white focus:border-[#0B7A3E] outline-none"
+              value={rejectModal.reason}
+              onChange={(e) => setRejectModal({ ...rejectModal, reason: e.target.value })}
+              className="w-full p-2.5 text-xs border border-slate-200 rounded-xl bg-slate-50"
             />
-
             <div className="flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setStepUpAction(null)}
-                className="px-3 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl"
+                onClick={() => setRejectModal(null)}
+                className="px-3 py-1.5 text-xs font-bold text-slate-500"
               >
-                Ka noqo
+                Cancel
               </button>
               <button
-                type="submit"
-                disabled={stepUpBusy || stepUpCode.length !== 6}
-                className="px-4 py-2 bg-[#0B7A3E] hover:bg-[#0F3D2A] text-white text-xs font-bold rounded-xl flex items-center gap-1.5 disabled:opacity-50"
+                type="button"
+                onClick={async () => {
+                  const { id, reason } = rejectModal;
+                  setRejectModal(null);
+                  await handleListingPatch(id, { status: 'rejected', rejectionReason: reason }, 'Rejected');
+                }}
+                className="px-4 py-1.5 bg-red-600 text-white text-xs font-bold rounded-xl"
               >
-                {stepUpBusy && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
-                <span>Xaqiiji & Fuli</span>
+                Confirm Reject
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Project Modal */}
+      {showAddProject && (
+        <div className="fixed inset-0 z-[520] bg-black/60 flex items-center justify-center p-4">
+          <form
+            onSubmit={handleCreateProject}
+            className="bg-white rounded-2xl p-5 max-w-md w-full space-y-3 border border-slate-200 shadow-2xl text-xs"
+          >
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-extrabold text-[#0F3D2A]">Create Real Estate Project</h4>
+              <button type="button" onClick={() => setShowAddProject(false)}>
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <input
+              required
+              type="text"
+              placeholder="Project Name (e.g. Barwaaqo Towers)"
+              value={projName}
+              onChange={(e) => setProjName(e.target.value)}
+              className="w-full h-10 px-3 rounded-xl bg-slate-50 border border-slate-200"
+            />
+            <input
+              required
+              type="text"
+              placeholder="Developer Name"
+              value={projDev}
+              onChange={(e) => setProjDev(e.target.value)}
+              className="w-full h-10 px-3 rounded-xl bg-slate-50 border border-slate-200"
+            />
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                type="text"
+                placeholder="City"
+                value={projCity}
+                onChange={(e) => setProjCity(e.target.value)}
+                className="h-10 px-3 rounded-xl bg-slate-50 border border-slate-200"
+              />
+              <input
+                type="text"
+                placeholder="District"
+                value={projDistrict}
+                onChange={(e) => setProjDistrict(e.target.value)}
+                className="h-10 px-3 rounded-xl bg-slate-50 border border-slate-200"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                type="number"
+                placeholder="Starting Price USD"
+                value={projPrice}
+                onChange={(e) => setProjPrice(Number(e.target.value))}
+                className="h-10 px-3 rounded-xl bg-slate-50 border border-slate-200"
+              />
+              <select
+                value={projStage}
+                onChange={(e) => setProjStage(e.target.value as 'off_plan' | 'building' | 'ready')}
+                className="h-10 px-3 rounded-xl bg-slate-50 border border-slate-200"
+              >
+                <option value="off_plan">Off Plan</option>
+                <option value="building">Under Construction</option>
+                <option value="ready">Ready</option>
+              </select>
+            </div>
+            <textarea
+              rows={2}
+              placeholder="Description..."
+              value={projDesc}
+              onChange={(e) => setProjDesc(e.target.value)}
+              className="w-full p-2.5 rounded-xl bg-slate-50 border border-slate-200"
+            />
+            <button
+              type="submit"
+              className="w-full py-2.5 bg-[#0B7A3E] text-white font-bold rounded-xl"
+            >
+              Publish Project
+            </button>
           </form>
+        </div>
+      )}
+
+      {/* Issued One-Time Recovery Code Modal */}
+      {issuedResetModal && (
+        <div className="fixed inset-0 z-[530] bg-black/60 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-5 max-w-sm w-full space-y-3 border border-slate-200 shadow-2xl text-xs">
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-extrabold text-[#0F3D2A]">One-Time Recovery Code Issued</h4>
+              <button type="button" onClick={() => setIssuedResetModal(null)}>
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-slate-600 leading-relaxed">
+              Share this single-use code with <strong>@{issuedResetModal.username}</strong>. It expires on{' '}
+              {new Date(issuedResetModal.expiresAt).toLocaleTimeString()}.
+            </p>
+            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl font-mono text-center text-base font-black text-[#0F3D2A] select-all">
+              {issuedResetModal.resetCode}
+            </div>
+            <button
+              type="button"
+              onClick={() => setIssuedResetModal(null)}
+              className="w-full py-2.5 bg-[#0B7A3E] text-white font-bold rounded-xl"
+            >
+              Done
+            </button>
+          </div>
         </div>
       )}
     </div>

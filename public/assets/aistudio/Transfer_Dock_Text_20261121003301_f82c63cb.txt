@@ -1,0 +1,359 @@
+FINAL MASTER IMPLEMENTATION PROMPT
+
+COMPLETE AUTHENTICATION SYSTEM + RBAC + PRIMARY ADMIN CONFIGURATION
+
+PROJECT MISSION
+
+You are responsible for completing a FULL, END-TO-END authentication system implementation in the existing application.
+
+This is a complete engineering task, not a UI-only task or a demonstration.
+
+You must inspect, implement, integrate, test, debug, and finalize every component required for the authentication system to work correctly in the actual application.
+
+Do not stop after planning, creating mockups, or writing example code.
+
+1. FIXED PROJECT DECISIONS
+
+These requirements are mandatory:
+
+- Authentication method: Username + Password.
+- Login interface: ONE unified login.
+- Registration: Open registration for ordinary users.
+- Authorization: Role-Based Access Control (RBAC).
+- Initial roles: ADMIN and USER.
+- Backend: Use the existing backend.
+- Database: Use the existing database.
+- Authentication: Free implementation without mandatory paid authentication providers.
+
+2. PRIMARY ADMINISTRATOR — OFFICIAL CONFIGURATION
+
+The following email is the designated primary administrator identity:
+
+ADMIN EMAIL:
+ddhamaan@gmail.com
+
+The system must provision this identity as the initial ADMIN account.
+
+Required behavior:
+
+1. Create or securely initialize the administrator account associated with this exact email.
+2. Assign the ADMIN role through a trusted server-side process.
+3. Ensure that this account is recognized as the primary administrator.
+4. The administrator must use the same unified login interface as ordinary users.
+5. Login credentials remain Username + Password.
+6. Store the administrator's email in the database.
+7. Enforce unique email and username constraints where appropriate.
+8. Prevent public registration from claiming or taking over the administrator identity.
+9. Prevent ordinary users from modifying the administrator's role or privileges.
+10. Protect the primary administrator from accidental deletion or unauthorized demotion.
+
+IMPORTANT:
+
+Do not invent an administrator password or expose credentials in source code.
+
+If the account does not exist, create it through a secure server-side initialization process.
+
+Use a secure initial setup procedure to establish the administrator's username and password. If the existing application has an account with this email, inspect and reconcile it safely rather than creating a duplicate.
+
+The email address alone must never be sufficient to obtain administrator privileges.
+
+3. COMPLETE UNIFIED LOGIN
+
+Implement a fully functional login system.
+
+Login interface:
+
+- Username
+- Password
+- Show/Hide Password
+- Remember Me where appropriate
+- Login
+- Create Account
+- Forgot Password
+
+Authentication must work against the actual existing backend and database.
+
+After successful authentication:
+
+ADMIN → Existing Admin Dashboard.
+
+USER → Existing User Dashboard.
+
+Do not create two separate authentication systems.
+
+4. COMPLETE OPEN REGISTRATION
+
+Implement a complete registration workflow.
+
+Fields:
+
+- Full Name
+- Username
+- Email (if supported by the existing account architecture)
+- Password
+- Confirm Password
+
+Every public registration must automatically receive:
+
+role = user
+status = active
+
+Never accept an ADMIN role from registration requests.
+
+Protect against:
+
+- Duplicate accounts.
+- Duplicate usernames.
+- Privilege escalation.
+- Automated registration abuse.
+- Invalid input.
+- Password manipulation.
+
+5. COMPLETE ADMINISTRATOR MANAGEMENT
+
+Implement a working Admin Dashboard integration.
+
+Administrator capabilities:
+
+- View all registered users.
+- Search and filter users.
+- View account information.
+- Activate accounts.
+- Block accounts.
+- Reactivate blocked accounts.
+- Manage permitted roles.
+- View account registration dates.
+- View user activity where supported.
+- Manage authorized application settings.
+- View administrative audit logs.
+
+The primary administrator must have the necessary authority to manage the application.
+
+Protect against accidental removal or demotion of the last active administrator.
+
+6. COMPLETE USER AUTHORIZATION
+
+Implement backend-enforced RBAC.
+
+USER:
+
+- Access permitted application features.
+- View permitted personal information.
+- Update permitted profile information.
+- Cannot access administrative endpoints.
+- Cannot manage other users.
+- Cannot change their own role.
+- Cannot bypass authorization through modified requests.
+
+ADMIN:
+
+- Access authorized administrative features.
+- Manage users and permitted system settings.
+- Access protected administrative APIs.
+
+Every protected API must independently verify the authenticated user's permissions.
+
+Frontend route protection alone is NOT sufficient.
+
+7. COMPLETE SECURITY IMPLEMENTATION
+
+Implement:
+
+- Argon2id or bcrypt password hashing.
+- Secure access-token management.
+- Refresh-token rotation where supported.
+- Session expiration.
+- Secure logout.
+- Token revocation.
+- Login rate limiting.
+- Secure mobile token storage.
+- Account status verification.
+- Protection against unauthorized privilege escalation.
+- Appropriate audit logging.
+
+Never store plaintext passwords.
+
+8. COMPLETE PASSWORD RECOVERY
+
+Inspect existing infrastructure and implement the safest practical password recovery solution.
+
+Do not require paid SMS or WhatsApp OTP services.
+
+If email recovery is supported, integrate it appropriately.
+
+If email delivery is not configured, implement a secure administrator-assisted recovery process and document its operation.
+
+Never reveal existing passwords.
+
+9. DATABASE AND BACKEND COMPLETION
+
+Inspect all existing database tables, models, authentication endpoints, middleware, services, and API routes.
+
+Implement all necessary changes.
+
+Requirements:
+
+- Database migrations.
+- Unique constraints.
+- Appropriate indexes.
+- User role management.
+- Account status management.
+- Password hashing.
+- Authentication services.
+- Authorization middleware.
+- Secure administrator initialization.
+- Session management.
+- Audit logging.
+
+Do not create duplicate user systems or replace the existing database.
+
+Preserve existing application data.
+
+10. COMPLETE FRONTEND AND MOBILE INTEGRATION
+
+Integrate every authentication feature into the actual existing application.
+
+Requirements:
+
+- Fully functional login screen.
+- Fully functional registration screen.
+- Working form validation.
+- Loading states.
+- Error handling.
+- Session persistence.
+- Automatic role detection.
+- Correct dashboard redirection.
+- Protected navigation.
+- Secure logout.
+- Blocked-account handling.
+- Session restoration after restarting the app.
+
+Maintain the existing application's design language and navigation.
+
+Do not redesign unrelated screens.
+
+11. FULL INTEGRATION AND REGRESSION TESTING
+
+Test the actual implementation, not just isolated sample functions.
+
+Verify:
+
+A. ADMIN:
+
+- Primary administrator is initialized correctly.
+- Admin can log in using the unified login.
+- Admin is redirected to the correct dashboard.
+- Admin can manage ordinary users.
+- Admin permissions are enforced by the backend.
+
+B. USER:
+
+- New users can register.
+- New users receive USER role automatically.
+- Users can log in.
+- Users reach the correct dashboard.
+- Users cannot access administrative APIs.
+
+C. SECURITY:
+
+- Public registration cannot create administrators.
+- Modified API requests cannot grant ADMIN privileges.
+- Blocked accounts cannot access protected resources.
+- Invalid credentials are rejected.
+- Expired sessions are rejected.
+- Revoked tokens cannot be reused.
+- Passwords are securely stored.
+
+D. EXISTING APPLICATION:
+
+- Existing features still work.
+- Existing backend integrations remain operational.
+- Existing data is preserved.
+- Existing navigation is not broken.
+- No unrelated modules are removed or rewritten.
+
+12. BUILD, DEBUG AND FINALIZE
+
+You must complete the actual implementation.
+
+Follow this execution sequence:
+
+1. Inspect the complete repository.
+2. Identify the existing authentication architecture.
+3. Identify database and backend dependencies.
+4. Create an implementation plan.
+5. Implement the database changes.
+6. Implement backend authentication.
+7. Implement RBAC and authorization.
+8. Initialize the primary administrator.
+9. Implement registration.
+10. Integrate login into the mobile application.
+11. Integrate dashboard routing.
+12. Implement user management.
+13. Implement password recovery.
+14. Run database migrations.
+15. Run available automated tests.
+16. Build the actual application.
+17. Fix all errors introduced by your changes.
+18. Test the complete login and registration workflows.
+19. Verify existing functionality.
+20. Deliver a final implementation report.
+
+Do not leave incomplete functions, placeholder screens, mock authentication, fake API responses, TODO-only implementations, or disconnected frontend components.
+
+Do not report a feature as completed unless it has actually been implemented and tested.
+
+If a required external configuration is missing, implement everything possible and clearly identify the exact remaining configuration rather than pretending it works.
+
+13. STRICT PROJECT PRESERVATION RULES
+
+- Do not rewrite the existing application.
+- Do not replace the existing backend.
+- Do not replace the existing database.
+- Do not delete existing application functionality.
+- Do not modify unrelated modules.
+- Do not introduce unnecessary paid services.
+- Do not invent project architecture.
+- Do not assume file names.
+- Follow existing coding conventions.
+- Maintain compatibility with the current application.
+- Make changes incrementally and safely.
+
+14. FINAL DELIVERY REQUIREMENTS
+
+When finished, provide:
+
+1. Complete list of files modified.
+2. Complete list of files created.
+3. Database migration details.
+4. Authentication API documentation.
+5. Primary administrator initialization instructions.
+6. Secure procedure for setting the initial Admin username and password.
+7. Registration and login testing results.
+8. RBAC security testing results.
+9. Application build results.
+10. Any remaining configuration requirements.
+
+FINAL ACCEPTANCE CRITERIA
+
+The task is complete ONLY when:
+
+- One unified login works.
+- Username + Password authentication works.
+- Open user registration works.
+- Primary Admin email ddhamaan@gmail.com is securely provisioned.
+- Admin is automatically identified.
+- Ordinary users are automatically identified.
+- Both dashboards work.
+- RBAC is enforced by the backend.
+- Admin user management works.
+- Session management works.
+- Password recovery has a documented functional implementation.
+- Existing application functionality is preserved.
+- Actual tests and build have been completed successfully.
+
+YOUR RESPONSIBILITY:
+
+Complete the entire authentication implementation in the existing application.
+
+Do not merely explain how to do it. Make the actual code changes, integrate all components, test the result, fix implementation errors, and deliver the finished working system.

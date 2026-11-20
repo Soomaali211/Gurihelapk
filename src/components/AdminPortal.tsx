@@ -1,81 +1,66 @@
-import React, { useEffect, useState } from 'react';
-import { User as FirebaseUser } from 'firebase/auth';
-import { AdminDevice, AdminRecord, AdminSessionState, Listing } from '../types';
-import { AdminAuthGate } from './AdminAuthGate';
+import React from 'react';
+import { ShieldAlert } from 'lucide-react';
+import { AuthUser, Listing, isAdminRole } from '../types';
 import { AdminDashboard } from './AdminDashboard';
-import { isVerifiedAdmin } from '../lib/firestoreRepo';
 
 interface AdminPortalProps {
-  listings: Listing[];
-  onApproveListing: (id: string) => void;
-  onRejectListing: (id: string, reason: string) => void;
+  currentUser: AuthUser | null;
   onViewListingDetail: (listing: Listing) => void;
-  firebaseUser: FirebaseUser | null;
-  hasCloudListings: boolean;
-  onSeedDatabase: () => Promise<void>;
+  onMarketplaceMutated: () => void;
   onBackToApp: () => void;
+  onOpenLogin: () => void;
+  onLogout: () => void;
 }
 
 export const AdminPortal: React.FC<AdminPortalProps> = ({
-  listings,
-  onApproveListing,
-  onRejectListing,
+  currentUser,
   onViewListingDetail,
-  firebaseUser,
-  hasCloudListings,
-  onSeedDatabase,
+  onMarketplaceMutated,
   onBackToApp,
+  onOpenLogin,
+  onLogout,
 }) => {
-  const [adminRecord, setAdminRecord] = useState<AdminRecord | null>(null);
-  const [session, setSession] = useState<AdminSessionState | null>(null);
-  const [currentDevice, setCurrentDevice] = useState<AdminDevice | null>(null);
-
-  // Drop in-memory Admin session immediately if Firebase user logs out or changes
-  useEffect(() => {
-    if (!firebaseUser || !isVerifiedAdmin(firebaseUser)) {
-      setSession(null);
-      setAdminRecord(null);
-      setCurrentDevice(null);
-    }
-  }, [firebaseUser]);
-
-  const isUnlocked = Boolean(
-    firebaseUser &&
-      isVerifiedAdmin(firebaseUser) &&
-      session &&
-      session.expiresAt > Date.now() &&
-      adminRecord &&
-      adminRecord.mfaEnabled
-  );
-
-  if (!isUnlocked) {
+  if (!currentUser || !isAdminRole(currentUser.role)) {
     return (
-      <AdminAuthGate
-        firebaseUser={firebaseUser}
-        onBackToApp={onBackToApp}
-        onAuthenticated={({ adminRecord: rec, session: sess, device }) => {
-          setAdminRecord(rec);
-          setSession(sess);
-          setCurrentDevice(device);
-        }}
-      />
+      <div className="flex-1 flex items-center justify-center p-6 bg-[#F6F8F9]">
+        <div className="bg-white rounded-3xl border border-slate-200 shadow-lg p-6 max-w-sm w-full text-center space-y-4">
+          <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-600 flex items-center justify-center mx-auto">
+            <ShieldAlert className="w-6 h-6" />
+          </div>
+          <h2 className="text-base font-extrabold text-slate-900">Access Unavailable</h2>
+          <p className="text-xs text-slate-600 leading-relaxed">
+            This page is unavailable for your current session. Return to the marketplace or sign in to continue.
+          </p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={onBackToApp}
+              className="flex-1 py-2.5 bg-slate-100 text-slate-700 text-xs font-bold rounded-xl"
+            >
+              Back to App
+            </button>
+            {!currentUser && (
+              <button
+                type="button"
+                onClick={onOpenLogin}
+                className="flex-1 py-2.5 bg-[#0B7A3E] text-white text-xs font-bold rounded-xl"
+              >
+                Sign In
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
     );
   }
 
   return (
     <AdminDashboard
-      listings={listings}
-      onApproveListing={onApproveListing}
-      onRejectListing={onRejectListing}
+      currentUser={currentUser}
       onViewListingDetail={onViewListingDetail}
-      firebaseUser={firebaseUser}
-      hasCloudListings={hasCloudListings}
-      onSeedDatabase={onSeedDatabase}
-      adminRecord={adminRecord}
-      adminSession={session}
-      currentDevice={currentDevice}
-      onSessionUpdate={(next) => setSession(next)}
-      onLockSession={() => setSession(null)}
+      onMarketplaceMutated={onMarketplaceMutated}
+      onBackToApp={onBackToApp}
+      onLogout={onLogout}
     />
   );
 };
